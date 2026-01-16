@@ -1,0 +1,1253 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>LEO24 CRM — Simulazione Dashboard</title>
+  <style>
+    :root{
+      --bg: #f7fbfc;
+      --card: #ffffff;
+      --ink: #0b0f14;              /* nero */
+      --muted: #5b6b7a;
+      --line: #e6eef2;
+
+      /* palette acqua/azzurrino */
+      --aqua-1: #e8fbff;
+      --aqua-2: #c9f3ff;
+      --aqua-3: #8fe6ff;
+      --aqua-4: #35c9f2;
+      --aqua-5: #0aa6d3;
+
+      --ok: #13b981;
+      --warn: #f59e0b;
+      --bad: #ef4444;
+    }
+
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{
+      margin:0;
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background: radial-gradient(1200px 600px at 20% -10%, var(--aqua-2), transparent 60%),
+                  radial-gradient(1200px 600px at 90% 0%, var(--aqua-1), transparent 55%),
+                  var(--bg);
+      color: var(--ink);
+    }
+
+    .app{
+      display:grid;
+      grid-template-columns: 280px 1fr;
+      min-height:100vh;
+    }
+
+    /* Sidebar */
+    .sidebar{
+      position:sticky;
+      top:0;
+      height:100vh;
+      padding:18px;
+      border-right:1px solid var(--line);
+      background: linear-gradient(180deg, rgba(255,255,255,.9), rgba(255,255,255,.75));
+      backdrop-filter: blur(8px);
+    }
+    .brand{
+      display:flex; align-items:center; gap:10px;
+      padding:10px 10px 14px;
+      border-bottom:1px solid var(--line);
+      margin-bottom:14px;
+    }
+    .logo{
+      width:36px;height:36px;border-radius:12px;
+      background: linear-gradient(135deg, var(--aqua-3), var(--aqua-5));
+      box-shadow: 0 10px 25px rgba(10,166,211,.25);
+    }
+    .brand h1{
+      font-size:14px; margin:0; letter-spacing:.2px;
+    }
+    .brand small{display:block;color:var(--muted);font-size:12px;margin-top:2px}
+
+    .nav{
+      display:flex; flex-direction:column; gap:8px;
+      margin-top:10px;
+    }
+    .nav button{
+      width:100%;
+      border:1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      padding:10px 12px;
+      border-radius:12px;
+      text-align:left;
+      display:flex; align-items:center; justify-content:space-between;
+      cursor:pointer;
+      transition: transform .06s ease, box-shadow .15s ease, border-color .15s ease;
+    }
+    .nav button:hover{
+      border-color: rgba(10,166,211,.35);
+      box-shadow: 0 12px 30px rgba(10,166,211,.10);
+    }
+    .nav button:active{transform:translateY(1px)}
+    .nav button.active{
+      background: linear-gradient(135deg, rgba(143,230,255,.35), rgba(10,166,211,.12));
+      border-color: rgba(10,166,211,.45);
+    }
+    .badge{
+      font-size:12px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background: rgba(232,251,255,.65);
+      color: var(--ink);
+    }
+    .sidebox{
+      margin-top:14px;
+      padding:12px;
+      border-radius:14px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.85);
+    }
+    .sidebox .row{display:flex; gap:10px; align-items:center; margin-top:8px}
+    .pill{
+      padding:6px 10px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background: rgba(232,251,255,.65);
+      font-size:12px;
+      color: var(--ink);
+    }
+    select, input{
+      width:100%;
+      border-radius:12px;
+      border:1px solid var(--line);
+      padding:10px 12px;
+      background:#fff;
+      color: var(--ink);
+      outline:none;
+    }
+    select:focus, input:focus{border-color: rgba(10,166,211,.55); box-shadow: 0 0 0 4px rgba(10,166,211,.12);}
+
+    /* Main */
+    .main{
+      padding:18px 18px 28px;
+    }
+    .topbar{
+      display:flex; gap:12px; align-items:center; justify-content:space-between;
+      padding:14px 14px;
+      border:1px solid var(--line);
+      border-radius:16px;
+      background: rgba(255,255,255,.8);
+      backdrop-filter: blur(8px);
+    }
+    .topbar .title{
+      display:flex; flex-direction:column;
+      gap:2px;
+    }
+    .topbar h2{margin:0; font-size:16px}
+    .topbar p{margin:0; color:var(--muted); font-size:12px}
+    .actions{display:flex; gap:10px; align-items:center}
+    .btn{
+      border:1px solid rgba(10,166,211,.35);
+      background: linear-gradient(135deg, rgba(143,230,255,.45), rgba(10,166,211,.14));
+      color: var(--ink);
+      padding:10px 12px;
+      border-radius:12px;
+      cursor:pointer;
+      transition: transform .06s ease, box-shadow .15s ease;
+      font-weight:600;
+      font-size:13px;
+    }
+    .btn:hover{box-shadow: 0 12px 26px rgba(10,166,211,.14)}
+    .btn:active{transform:translateY(1px)}
+    .btn.ghost{
+      border:1px solid var(--line);
+      background:#fff;
+      font-weight:600;
+    }
+
+    /* Grid cards */
+    .grid{
+      display:grid;
+      grid-template-columns: repeat(12, 1fr);
+      gap:12px;
+      margin-top:12px;
+    }
+    .card{
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.88);
+      border-radius:16px;
+      padding:14px;
+      box-shadow: 0 10px 30px rgba(10, 20, 30, .04);
+      min-height: 80px;
+    }
+    .card h3{
+      margin:0 0 8px;
+      font-size:13px;
+      color: var(--muted);
+      font-weight:700;
+      letter-spacing:.2px;
+    }
+    .kpi{
+      display:flex; align-items:flex-end; justify-content:space-between;
+      gap:10px;
+    }
+    .kpi .value{
+      font-size:24px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+    .kpi .delta{
+      font-size:12px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background: rgba(232,251,255,.7);
+      color: var(--ink);
+      white-space:nowrap;
+    }
+    .span-3{grid-column: span 3;}
+    .span-4{grid-column: span 4;}
+    .span-5{grid-column: span 5;}
+    .span-6{grid-column: span 6;}
+    .span-7{grid-column: span 7;}
+    .span-8{grid-column: span 8;}
+    .span-12{grid-column: span 12;}
+
+    /* Tables */
+    table{
+      width:100%;
+      border-collapse:separate;
+      border-spacing:0;
+      font-size:13px;
+    }
+    th, td{
+      text-align:left;
+      padding:10px 10px;
+      border-bottom:1px solid var(--line);
+      vertical-align:middle;
+    }
+    th{color:var(--muted); font-size:12px; font-weight:800}
+    tr:last-child td{border-bottom:none}
+    .tag{
+      display:inline-flex; align-items:center; gap:6px;
+      padding:4px 8px;
+      border-radius:999px;
+      border:1px solid var(--line);
+      background: rgba(232,251,255,.65);
+      font-size:12px;
+    }
+    .dot{width:8px;height:8px;border-radius:50%;}
+    .dot.ok{background: var(--ok)}
+    .dot.warn{background: var(--warn)}
+    .dot.bad{background: var(--bad)}
+
+    /* Bar list */
+    .bars{display:flex; flex-direction:column; gap:10px}
+    .barrow{display:grid; grid-template-columns: 150px 1fr 38px; gap:10px; align-items:center}
+    .barlabel{font-size:13px}
+    .bar{
+      height:10px; border-radius:999px; border:1px solid var(--line);
+      background: rgba(232,251,255,.55);
+      overflow:hidden;
+    }
+    .fill{
+      height:100%;
+      border-radius:999px;
+      background: linear-gradient(90deg, var(--aqua-3), var(--aqua-5));
+      width: 50%;
+    }
+    .barval{font-size:12px; color:var(--muted); text-align:right}
+
+    /* Drawer/modal */
+    .overlay{
+      position:fixed; inset:0;
+      background: rgba(10, 15, 20, .35);
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding:16px;
+    }
+    .overlay.show{display:flex}
+    .modal{
+      width:min(980px, 100%);
+      border-radius:18px;
+      border:1px solid var(--line);
+      background: rgba(255,255,255,.95);
+      box-shadow: 0 25px 80px rgba(0,0,0,.18);
+      overflow:hidden;
+    }
+    .modalHeader{
+      display:flex; align-items:center; justify-content:space-between;
+      padding:14px 16px;
+      border-bottom:1px solid var(--line);
+      background: linear-gradient(135deg, rgba(143,230,255,.35), rgba(10,166,211,.10));
+    }
+    .modalHeader h4{margin:0; font-size:14px}
+    .modalBody{padding:14px 16px}
+    .two{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:12px;
+    }
+    .field label{
+      display:block;
+      font-size:12px;
+      color:var(--muted);
+      font-weight:800;
+      margin-bottom:6px;
+    }
+    textarea{
+      width:100%;
+      border-radius:12px;
+      border:1px solid var(--line);
+      padding:10px 12px;
+      min-height:110px;
+      resize:vertical;
+      font-family: inherit;
+      color: var(--ink);
+      outline:none;
+      background:#fff;
+    }
+    textarea:focus{border-color: rgba(10,166,211,.55); box-shadow: 0 0 0 4px rgba(10,166,211,.12);}
+
+    .rowBtns{display:flex; gap:10px; margin-top:12px; justify-content:flex-end}
+    .muted{color:var(--muted)}
+    .hint{font-size:12px;color:var(--muted);margin:8px 0 0}
+    .small{font-size:12px}
+
+    /* Responsive */
+    @media (max-width: 980px){
+      .app{grid-template-columns: 1fr}
+      .sidebar{position:relative;height:auto;border-right:none;border-bottom:1px solid var(--line)}
+      .grid{grid-template-columns: repeat(6, 1fr)}
+      .span-3{grid-column: span 3}
+      .span-4{grid-column: span 6}
+      .span-5{grid-column: span 6}
+      .span-6{grid-column: span 6}
+      .span-7{grid-column: span 6}
+      .span-8{grid-column: span 6}
+      .span-12{grid-column: span 6}
+      .two{grid-template-columns:1fr}
+    }
+  </style>
+</head>
+
+<body>
+  <div class="app">
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="logo" aria-hidden="true"></div>
+        <div>
+          <h1>LEO24 CRM</h1>
+          <small>Simulazione dashboard (cliccabile)</small>
+        </div>
+      </div>
+
+      <div class="nav" role="tablist" aria-label="Dashboard">
+        <button class="active" data-view="vendite" role="tab" aria-selected="true">
+          <span>📈 Vendite</span>
+          <span class="badge" id="badgeVendite">€ 37.500</span>
+        </button>
+        <button data-view="chiamate" role="tab" aria-selected="false">
+          <span>📞 Chiamate</span>
+          <span class="badge" id="badgeChiamate">Da fare: 23</span>
+        </button>
+        <button data-view="assistenza" role="tab" aria-selected="false">
+          <span>🛠️ Assistenza</span>
+          <span class="badge" id="badgeAssistenza">Fuori SLA: 2</span>
+        </button>
+      </div>
+
+      <div class="sidebox">
+        <div class="small muted"><b>Filtri rapidi</b></div>
+        <div class="row">
+          <div style="flex:1">
+            <label class="small muted"><b>Periodo</b></label>
+            <select id="periodo">
+              <option value="oggi">Oggi</option>
+              <option value="settimana" selected>Settimana</option>
+              <option value="mese">Mese</option>
+              <option value="custom">Custom</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label class="small muted"><b>Portale</b></label>
+            <select id="portale">
+              <option value="tutti" selected>Tutti</option>
+              <option value="optyshop">OptyShop</option>
+              <option value="aziendetg">Aziende TG Calabria</option>
+              <option value="tgimmobiliare">TGImmobiliare</option>
+              <option value="mydoctor">MyDoctor+</option>
+              <option value="jobstg">JobsTG Calabria</option>
+              <option value="mercatino">Mercatino</option>
+              <option value="tgcalabria">TG Calabria</option>
+              <option value="mytaxy">MyTaxy</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div style="flex:1">
+            <label class="small muted"><b>Cerca</b></label>
+            <input id="search" placeholder="Nome, tel, email, P.IVA…" />
+          </div>
+        </div>
+        <div class="hint">È una demo: i filtri simulano il comportamento.</div>
+      </div>
+
+      <div class="sidebox">
+        <div class="small muted"><b>Azioni veloci</b></div>
+        <div class="row" style="flex-wrap:wrap">
+          <span class="pill">➕ Nuovo lead</span>
+          <span class="pill">📞 Avvia chiamate</span>
+          <span class="pill">🛠️ Nuovo ticket</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main">
+      <div class="topbar">
+        <div class="title">
+          <h2 id="pageTitle">Dashboard Vendite</h2>
+          <p id="pageSubtitle">KPI, pipeline e lead caldi — stile acqua/azzurrino, testo nero.</p>
+        </div>
+        <div class="actions">
+          <button class="btn ghost" id="btnRefresh">Aggiorna</button>
+          <button class="btn" id="btnPrimary">➕ Nuovo lead</button>
+        </div>
+      </div>
+
+      <!-- VIEW: VENDITE -->
+      <section id="view-vendite" class="view">
+        <div class="grid">
+          <div class="card span-3">
+            <h3>Lead nuovi</h3>
+            <div class="kpi">
+              <div class="value" id="kpiLead">42</div>
+              <div class="delta">+12%</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Opportunità aperte</h3>
+            <div class="kpi">
+              <div class="value" id="kpiOpp">18</div>
+              <div class="delta">+3</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Vendite (periodo)</h3>
+            <div class="kpi">
+              <div class="value" id="kpiVendite">9</div>
+              <div class="delta">+1</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Valore (periodo)</h3>
+            <div class="kpi">
+              <div class="value" id="kpiValore">€ 37.500</div>
+              <div class="delta">+8%</div>
+            </div>
+          </div>
+
+          <div class="card span-6">
+            <h3>Lead per portale</h3>
+            <div class="bars" id="barsPortali"></div>
+            <div class="hint">Clicca su una riga per filtrare (demo).</div>
+          </div>
+
+          <div class="card span-6">
+            <h3>Top operatori</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Operatore</th>
+                  <th>Lead</th>
+                  <th>Vendite</th>
+                  <th>Conv.</th>
+                </tr>
+              </thead>
+              <tbody id="tblOperatori"></tbody>
+            </table>
+          </div>
+
+          <div class="card span-7">
+            <h3>Pipeline opportunità (demo)</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Cliente</th>
+                  <th>Fase</th>
+                  <th>Valore</th>
+                  <th>Prossimo step</th>
+                </tr>
+              </thead>
+              <tbody id="tblPipeline"></tbody>
+            </table>
+            <div class="hint">Clic su una riga: apre pannello dettagli (demo).</div>
+          </div>
+
+          <div class="card span-5">
+            <h3>Lead caldi da chiamare</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Contatto</th>
+                  <th>Sorgente</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tblLeadCaldi"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: CHIAMATE -->
+      <section id="view-chiamate" class="view" style="display:none">
+        <div class="grid">
+          <div class="card span-3">
+            <h3>Chiamate da fare</h3>
+            <div class="kpi">
+              <div class="value" id="kpiCallTodo">23</div>
+              <div class="delta">oggi</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Richiami</h3>
+            <div class="kpi">
+              <div class="value" id="kpiCallbacks">11</div>
+              <div class="delta">entro 24h</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Chiamate fatte</h3>
+            <div class="kpi">
+              <div class="value" id="kpiCallsDone">37</div>
+              <div class="delta">oggi</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Conversione</h3>
+            <div class="kpi">
+              <div class="value" id="kpiCallConv">21%</div>
+              <div class="delta">vendite/app.</div>
+            </div>
+          </div>
+
+          <div class="card span-8">
+            <h3>Chiamate di oggi</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Ora</th>
+                  <th>Contatto</th>
+                  <th>Sorgente</th>
+                  <th>Priorità</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tblCallsToday"></tbody>
+            </table>
+            <div class="hint">Clic “CHIAMA” per aprire la finestra esito (demo).</div>
+          </div>
+
+          <div class="card span-4">
+            <h3>Performance operatori</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Operatore</th>
+                  <th>Chiamate</th>
+                  <th>Vendite</th>
+                  <th>Tempo medio</th>
+                </tr>
+              </thead>
+              <tbody id="tblCallOps"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- VIEW: ASSISTENZA -->
+      <section id="view-assistenza" class="view" style="display:none">
+        <div class="grid">
+          <div class="card span-3">
+            <h3>Ticket aperti</h3>
+            <div class="kpi">
+              <div class="value" id="kpiTOpen">14</div>
+              <div class="delta">attivi</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>In lavorazione</h3>
+            <div class="kpi">
+              <div class="value" id="kpiTProg">9</div>
+              <div class="delta">oggi</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Fuori SLA</h3>
+            <div class="kpi">
+              <div class="value" id="kpiTSla">2</div>
+              <div class="delta">urgenti</div>
+            </div>
+          </div>
+          <div class="card span-3">
+            <h3>Chiusi oggi</h3>
+            <div class="kpi">
+              <div class="value" id="kpiTClosed">6</div>
+              <div class="delta">ok</div>
+            </div>
+          </div>
+
+          <div class="card span-7">
+            <h3>Coda ticket</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>ID</th>
+                  <th>Cliente</th>
+                  <th>Canale</th>
+                  <th>Priorità</th>
+                  <th>SLA</th>
+                  <th>Stato</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="tblTickets"></tbody>
+            </table>
+            <div class="hint">Clic “APRl” per aprire dettagli ticket (demo).</div>
+          </div>
+
+          <div class="card span-5">
+            <h3>Agenda tecnici (oggi)</h3>
+            <table>
+              <thead>
+                <tr>
+                  <th>Tecnico</th>
+                  <th>Interventi</th>
+                  <th>Stato</th>
+                </tr>
+              </thead>
+              <tbody id="tblTechs"></tbody>
+            </table>
+            <div class="hint">Nella versione reale: calendario giorno/settimana.</div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MODAL: generico (dettaglio / chiamata / ticket) -->
+  <div class="overlay" id="overlay" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <div class="modalHeader">
+        <h4 id="modalTitle">Dettaglio</h4>
+        <button class="btn ghost" id="btnClose">Chiudi</button>
+      </div>
+      <div class="modalBody" id="modalBody">
+        <!-- content injected -->
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // --- Demo data ---
+    const data = {
+      portali: [
+        { key:'optyshop', name:'OptyShop', value:18 },
+        { key:'aziendetg', name:'Aziende TG Calabria', value:12 },
+        { key:'tgimmobiliare', name:'TGImmobiliare', value:7 },
+        { key:'mydoctor', name:'MyDoctor+', value:3 },
+        { key:'altri', name:'Altri', value:2 },
+      ],
+      operatoriVendite: [
+        { name:'Mario Rossi', lead:15, sales:4, conv:'27%' },
+        { name:'Anna Bianchi', lead:12, sales:3, conv:'25%' },
+        { name:'Luca Verdi', lead:10, sales:1, conv:'10%' },
+      ],
+      pipeline: [
+        { customer:'Azienda Alfa', stage:'Preventivo', value:'€ 4.800', next:'Richiamo oggi 16:00', source:'aziendetg' },
+        { customer:'Studio Medico Beta', stage:'Negoziazione', value:'€ 2.100', next:'Invio condizioni', source:'mydoctor' },
+        { customer:'Cliente OptyShop (P. Neri)', stage:'Contattato', value:'€ 390', next:'WhatsApp + link', source:'optyshop' },
+        { customer:'Agenzia Immobiliare Delta', stage:'Nuovo', value:'€ 1.200', next:'Prima chiamata', source:'tgimmobiliare' },
+      ],
+      leadCaldi: [
+        { name:'Paolo Neri', source:'OptyShop', sourceKey:'optyshop', phone:'+39 333 123 4567', heat:'🔥 Caldo' },
+        { name:'Azienda Gamma SRL', source:'Aziende TG Calabria', sourceKey:'aziendetg', phone:'+39 0961 555 111', heat:'🔥 Caldo' },
+        { name:'Sara L.', source:'TGImmobiliare', sourceKey:'tgimmobiliare', phone:'+39 320 888 9090', heat:'🟡 Medio' },
+      ],
+      callsToday: [
+        { time:'09:30', who:'Azienda Alfa', source:'Aziende TG Calabria', sourceKey:'aziendetg', prio:'Alta' },
+        { time:'10:00', who:'Mario B.', source:'TGImmobiliare', sourceKey:'tgimmobiliare', prio:'Media' },
+        { time:'10:30', who:'Studio Med. Beta', source:'MyDoctor+', sourceKey:'mydoctor', prio:'Bassa' },
+        { time:'11:00', who:'Paolo Neri', source:'OptyShop', sourceKey:'optyshop', prio:'Alta' },
+      ],
+      callOps: [
+        { name:'Mario Rossi', calls:18, sales:4, avg:'3:20' },
+        { name:'Anna Bianchi', calls:14, sales:3, avg:'4:10' },
+        { name:'Luca Verdi', calls:12, sales:1, avg:'2:55' },
+      ],
+      tickets: [
+        { id:'#1245', customer:'Studio Med. Beta', channel:'MyDoctor+', prio:'Urgente', sla:'-2h', status:'In lavorazione' },
+        { id:'#1246', customer:'Paolo Neri', channel:'OptyShop', prio:'Media', sla:'+6h', status:'Aperto' },
+        { id:'#1247', customer:'Azienda Alfa', channel:'Telefono', prio:'Bassa', sla:'+18h', status:'In attesa cliente' },
+        { id:'#1248', customer:'Azienda Gamma SRL', channel:'Aziende TG Calabria', prio:'Alta', sla:'+1h', status:'Aperto' },
+      ],
+      techs: [
+        { name:'Gianni', jobs:2, state:'Disponibile' },
+        { name:'Paolo', jobs:3, state:'Pieno' },
+        { name:'Marco', jobs:1, state:'Disponibile' },
+      ]
+    };
+
+    // --- Helpers ---
+    const $ = (sel) => document.querySelector(sel);
+    const $$ = (sel) => Array.from(document.querySelectorAll(sel));
+
+    const state = {
+      view: 'vendite',
+      portale: 'tutti',
+      periodo: 'settimana',
+      search: ''
+    };
+
+    function heatDot(prio){
+      const p = String(prio).toLowerCase();
+      if(p.includes('urg') || p.includes('alta')) return 'bad';
+      if(p.includes('media') || p.includes('+1h') || p.includes('medio')) return 'warn';
+      return 'ok';
+    }
+
+    function setView(view){
+      state.view = view;
+
+      // update nav
+      $$('.nav button').forEach(b=>{
+        const on = b.dataset.view === view;
+        b.classList.toggle('active', on);
+        b.setAttribute('aria-selected', on ? 'true' : 'false');
+      });
+
+      // update sections
+      ['vendite','chiamate','assistenza'].forEach(v=>{
+        const el = $('#view-' + v);
+        el.style.display = (v===view) ? 'block' : 'none';
+      });
+
+      // update header text
+      const titleMap = {
+        vendite: ['Dashboard Vendite', 'KPI, pipeline e lead caldi — controllo commerciale.'],
+        chiamate: ['Dashboard Chiamate', 'Lista chiamate, esiti, richiami e performance operatori.'],
+        assistenza: ['Dashboard Assistenza', 'Ticket, SLA, agenda tecnici e consuntivi (demo).']
+      };
+      $('#pageTitle').textContent = titleMap[view][0];
+      $('#pageSubtitle').textContent = titleMap[view][1];
+
+      // update primary button label
+      const btnMap = {
+        vendite: '➕ Nuovo lead',
+        chiamate: '📞 Avvia chiamate',
+        assistenza: '🛠️ Nuovo ticket'
+      };
+      $('#btnPrimary').textContent = btnMap[view];
+
+      renderAll();
+    }
+
+    function renderBars(){
+      const wrap = $('#barsPortali');
+      wrap.innerHTML = '';
+      const max = Math.max(...data.portali.map(p=>p.value));
+      data.portali.forEach(p=>{
+        const row = document.createElement('div');
+        row.className = 'barrow';
+        row.innerHTML = `
+          <div class="barlabel"><b>${p.name}</b></div>
+          <div class="bar"><div class="fill" style="width:${(p.value/max)*100}%"></div></div>
+          <div class="barval">${p.value}</div>
+        `;
+        row.style.cursor = 'pointer';
+        row.title = 'Clicca per filtrare (demo)';
+        row.addEventListener('click', ()=>{
+          // set filter to the clicked portal key if we have it
+          if(p.key !== 'altri'){
+            $('#portale').value = p.key;
+            state.portale = p.key;
+          } else {
+            $('#portale').value = 'tutti';
+            state.portale = 'tutti';
+          }
+          renderAll();
+        });
+        wrap.appendChild(row);
+      });
+    }
+
+    function filteredByPortal(arr, keyField){
+      if(state.portale === 'tutti') return arr;
+      return arr.filter(x => (x[keyField] || '').toLowerCase() === state.portale);
+    }
+
+    function matchesSearch(text){
+      const q = state.search.trim().toLowerCase();
+      if(!q) return true;
+      return String(text).toLowerCase().includes(q);
+    }
+
+    function renderVendite(){
+      // operatori
+      const opT = $('#tblOperatori');
+      opT.innerHTML = data.operatoriVendite.map(o=>`
+        <tr>
+          <td><b>${o.name}</b></td>
+          <td>${o.lead}</td>
+          <td>${o.sales}</td>
+          <td>${o.conv}</td>
+        </tr>
+      `).join('');
+
+      // pipeline with portal filter + search
+      let pip = filteredByPortal(data.pipeline, 'source')
+        .filter(x => matchesSearch(x.customer + ' ' + x.stage + ' ' + x.value));
+      const tb = $('#tblPipeline');
+      tb.innerHTML = pip.map(p=>`
+        <tr class="clickRow" data-customer="${p.customer}">
+          <td><b>${p.customer}</b></td>
+          <td><span class="tag"><span class="dot ${heatDot(p.stage)}"></span>${p.stage}</span></td>
+          <td>${p.value}</td>
+          <td class="muted">${p.next}</td>
+        </tr>
+      `).join('') || `<tr><td colspan="4" class="muted">Nessun dato con questi filtri.</td></tr>`;
+
+      // lead caldi filter + search
+      let hot = filteredByPortal(data.leadCaldi, 'sourceKey')
+        .filter(x => matchesSearch(x.name + ' ' + x.phone + ' ' + x.source));
+      const lh = $('#tblLeadCaldi');
+      lh.innerHTML = hot.map(l=>`
+        <tr>
+          <td>
+            <b>${l.name}</b><div class="muted small">${l.phone}</div>
+          </td>
+          <td><span class="tag"><span class="dot ${l.heat.includes('🔥')?'bad':(l.heat.includes('🟡')?'warn':'ok')}"></span>${l.source}</span></td>
+          <td style="text-align:right">
+            <button class="btn ghost small" data-call="${l.name}">CHIAMA</button>
+          </td>
+        </tr>
+      `).join('') || `<tr><td colspan="3" class="muted">Nessun lead caldo.</td></tr>`;
+
+      // row click pipeline -> detail modal
+      $$('#tblPipeline .clickRow').forEach(tr=>{
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', ()=>{
+          const name = tr.dataset.customer;
+          openDetailModal('Dettaglio opportunità', `
+            <div class="two">
+              <div class="field">
+                <label>Cliente</label>
+                <input value="${name}" readonly />
+              </div>
+              <div class="field">
+                <label>Azioni rapide</label>
+                <div class="rowBtns" style="justify-content:flex-start">
+                  <button class="btn">📞 Pianifica chiamata</button>
+                  <button class="btn ghost">📄 Crea preventivo</button>
+                </div>
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>Note</label>
+              <textarea placeholder="Note commerciali… (demo)"></textarea>
+            </div>
+            <div class="hint">Qui nella versione reale: storico attività, documenti, offerte, task.</div>
+          `);
+        });
+      });
+
+      // call from hot leads
+      $$('#tblLeadCaldi button[data-call]').forEach(btn=>{
+        btn.addEventListener('click', (e)=>{
+          e.stopPropagation();
+          openCallModal(btn.dataset.call);
+        });
+      });
+    }
+
+    function renderChiamate(){
+      let calls = filteredByPortal(data.callsToday, 'sourceKey')
+        .filter(x => matchesSearch(x.who + ' ' + x.source + ' ' + x.time));
+      const t = $('#tblCallsToday');
+      t.innerHTML = calls.map(c=>`
+        <tr>
+          <td><b>${c.time}</b></td>
+          <td>${c.who}</td>
+          <td class="muted">${c.source}</td>
+          <td><span class="tag"><span class="dot ${heatDot(c.prio)}"></span>${c.prio}</span></td>
+          <td style="text-align:right">
+            <button class="btn ghost small" data-call="${c.who}">CHIAMA</button>
+          </td>
+        </tr>
+      `).join('') || `<tr><td colspan="5" class="muted">Nessuna chiamata con questi filtri.</td></tr>`;
+
+      $$('#tblCallsToday button[data-call]').forEach(btn=>{
+        btn.addEventListener('click', ()=> openCallModal(btn.dataset.call));
+      });
+
+      const ops = $('#tblCallOps');
+      ops.innerHTML = data.callOps.map(o=>`
+        <tr>
+          <td><b>${o.name}</b></td>
+          <td>${o.calls}</td>
+          <td>${o.sales}</td>
+          <td class="muted">${o.avg} min</td>
+        </tr>
+      `).join('');
+    }
+
+    function renderAssistenza(){
+      let tickets = filteredByPortal(
+        data.tickets.map(t=> ({...t, sourceKey: normalizeSourceKey(t.channel)})),
+        'sourceKey'
+      ).filter(x => matchesSearch(x.customer + ' ' + x.channel + ' ' + x.id));
+
+      const tt = $('#tblTickets');
+      tt.innerHTML = tickets.map(t=>`
+        <tr>
+          <td><b>${t.id}</b></td>
+          <td>${t.customer}</td>
+          <td class="muted">${t.channel}</td>
+          <td><span class="tag"><span class="dot ${heatDot(t.prio)}"></span>${t.prio}</span></td>
+          <td><span class="tag"><span class="dot ${heatDot(t.sla)}"></span>${t.sla}</span></td>
+          <td class="muted">${t.status}</td>
+          <td style="text-align:right">
+            <button class="btn ghost small" data-ticket="${t.id}">APRI</button>
+          </td>
+        </tr>
+      `).join('') || `<tr><td colspan="7" class="muted">Nessun ticket con questi filtri.</td></tr>`;
+
+      $$('#tblTickets button[data-ticket]').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          openDetailModal('Dettaglio ticket ' + btn.dataset.ticket, `
+            <div class="two">
+              <div class="field">
+                <label>Stato</label>
+                <select>
+                  <option>Aperto</option>
+                  <option selected>In lavorazione</option>
+                  <option>In attesa cliente</option>
+                  <option>Risolto</option>
+                  <option>Chiuso</option>
+                </select>
+              </div>
+              <div class="field">
+                <label>Assegna tecnico</label>
+                <select>
+                  <option>—</option>
+                  <option selected>Gianni</option>
+                  <option>Paolo</option>
+                  <option>Marco</option>
+                </select>
+              </div>
+            </div>
+            <div class="field" style="margin-top:12px">
+              <label>Messaggio / aggiornamento</label>
+              <textarea placeholder="Scrivi aggiornamento ticket… (demo)"></textarea>
+            </div>
+            <div class="rowBtns">
+              <button class="btn">💾 Salva</button>
+              <button class="btn ghost" onclick="openServiceReport()">🧾 Consuntivo intervento</button>
+            </div>
+            <div class="hint">Nella versione reale: allegati, storico interventi, SLA, fatturabile.</div>
+          `);
+        });
+      });
+
+      const techs = $('#tblTechs');
+      techs.innerHTML = data.techs.map(t=>`
+        <tr>
+          <td><b>${t.name}</b></td>
+          <td>${t.jobs}</td>
+          <td><span class="tag"><span class="dot ${t.state==='Disponibile'?'ok':'warn'}"></span>${t.state}</span></td>
+        </tr>
+      `).join('');
+    }
+
+    function normalizeSourceKey(channel){
+      const c = String(channel).toLowerCase();
+      if(c.includes('opty')) return 'optyshop';
+      if(c.includes('aziende')) return 'aziendetg';
+      if(c.includes('immob')) return 'tgimmobiliare';
+      if(c.includes('doctor')) return 'mydoctor';
+      if(c.includes('jobs')) return 'jobstg';
+      if(c.includes('merc')) return 'mercatino';
+      if(c.includes('tg calabria') || c.includes('tg')) return 'tgcalabria';
+      if(c.includes('taxy')) return 'mytaxy';
+      return 'tutti';
+    }
+
+    function renderAll(){
+      // Update "fake" KPI a seconda dei filtri (solo demo: non calcolo reale)
+      const portal = state.portale;
+      const factor = (portal === 'tutti') ? 1 : 0.65;
+      $('#kpiLead').textContent = Math.round(42 * factor);
+      $('#kpiOpp').textContent = Math.round(18 * factor);
+      $('#kpiVendite').textContent = Math.max(1, Math.round(9 * factor));
+      $('#kpiValore').textContent = '€ ' + (Math.round(37500 * factor)).toLocaleString('it-IT');
+
+      $('#badgeVendite').textContent = $('#kpiValore').textContent;
+      $('#badgeChiamate').textContent = 'Da fare: ' + Math.round(23 * factor);
+      $('#badgeAssistenza').textContent = 'Fuori SLA: ' + Math.max(0, Math.round(2 * factor));
+
+      renderBars();
+      renderVendite();
+      renderChiamate();
+      renderAssistenza();
+    }
+
+    // --- Modal helpers ---
+    const overlay = $('#overlay');
+    const modalTitle = $('#modalTitle');
+    const modalBody = $('#modalBody');
+
+    function openDetailModal(title, html){
+      modalTitle.textContent = title;
+      modalBody.innerHTML = html;
+      overlay.classList.add('show');
+      overlay.setAttribute('aria-hidden','false');
+    }
+
+    function openCallModal(who){
+      openDetailModal('Esito chiamata — ' + who, `
+        <div class="two">
+          <div class="field">
+            <label>Esito</label>
+            <select id="callOutcome">
+              <option value="sold">Venduto</option>
+              <option value="callback" selected>Richiamare</option>
+              <option value="no_answer">Non risponde</option>
+              <option value="not_interested">Non interessato</option>
+              <option value="info_sent">Info inviate</option>
+              <option value="appointment">Appuntamento fissato</option>
+            </select>
+          </div>
+          <div class="field">
+            <label>Prossimo richiamo</label>
+            <input id="callNext" type="datetime-local" />
+            <div class="hint">Se “Non risponde”, propone richiamo automatico (demo).</div>
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Note chiamata</label>
+          <textarea placeholder="Scrivi note… (demo)"></textarea>
+        </div>
+        <div class="rowBtns">
+          <button class="btn ghost" id="btnAuto">⚡ Auto-richiama +1 giorno</button>
+          <button class="btn" id="btnSaveCall">💾 Salva esito</button>
+        </div>
+      `);
+
+      // default next = today + 1 hour
+      const d = new Date();
+      d.setHours(d.getHours()+1);
+      $('#callNext').value = toLocalInputValue(d);
+
+      $('#btnAuto').addEventListener('click', ()=>{
+        const dd = new Date();
+        dd.setDate(dd.getDate()+1);
+        dd.setHours(10,0,0,0);
+        $('#callNext').value = toLocalInputValue(dd);
+      });
+
+      $('#callOutcome').addEventListener('change', (e)=>{
+        if(e.target.value === 'no_answer'){
+          const dd = new Date();
+          dd.setDate(dd.getDate()+1);
+          dd.setHours(10,0,0,0);
+          $('#callNext').value = toLocalInputValue(dd);
+        }
+      });
+
+      $('#btnSaveCall').addEventListener('click', ()=>{
+        openDetailModal('Salvato ✅', `
+          <p><b>Esito salvato</b> (demo).</p>
+          <p class="muted">Nella versione reale: crea Activity + Task successivo, aggiorna pipeline e dashboard.</p>
+          <div class="rowBtns"><button class="btn" id="okClose">Chiudi</button></div>
+        `);
+        $('#okClose').addEventListener('click', closeModal);
+      });
+    }
+
+    function openServiceReport(){
+      openDetailModal('Consuntivo intervento (demo)', `
+        <div class="two">
+          <div class="field">
+            <label>Ore lavoro (minuti)</label>
+            <input type="number" value="90" />
+          </div>
+          <div class="field">
+            <label>Km</label>
+            <input type="number" value="25" />
+          </div>
+        </div>
+        <div class="two" style="margin-top:12px">
+          <div class="field">
+            <label>Ricambi usati</label>
+            <input placeholder="Cod.123 x1, Cod.777 x2 (fase 2 magazzino)" />
+          </div>
+          <div class="field">
+            <label>Fatturabile</label>
+            <select>
+              <option selected>Sì</option>
+              <option>No</option>
+            </select>
+          </div>
+        </div>
+        <div class="field" style="margin-top:12px">
+          <label>Note tecniche</label>
+          <textarea placeholder="Note…"></textarea>
+        </div>
+        <div class="rowBtns">
+          <button class="btn">💾 Salva consuntivo</button>
+          <button class="btn ghost" onclick="closeModal()">Chiudi</button>
+        </div>
+      `);
+    }
+
+    function closeModal(){
+      overlay.classList.remove('show');
+      overlay.setAttribute('aria-hidden','true');
+    }
+
+    function toLocalInputValue(date){
+      const pad = n => String(n).padStart(2,'0');
+      const yyyy = date.getFullYear();
+      const mm = pad(date.getMonth()+1);
+      const dd = pad(date.getDate());
+      const hh = pad(date.getHours());
+      const mi = pad(date.getMinutes());
+      return `${yyyy}-${mm}-${dd}T${hh}:${mi}`;
+    }
+
+    // --- Events ---
+    $$('.nav button').forEach(btn=>{
+      btn.addEventListener('click', ()=> setView(btn.dataset.view));
+    });
+
+    $('#btnClose').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e)=>{ if(e.target === overlay) closeModal(); });
+    window.addEventListener('keydown', (e)=>{ if(e.key === 'Escape') closeModal(); });
+
+    $('#periodo').addEventListener('change', (e)=>{ state.periodo = e.target.value; renderAll(); });
+    $('#portale').addEventListener('change', (e)=>{ state.portale = e.target.value; renderAll(); });
+    $('#search').addEventListener('input', (e)=>{ state.search = e.target.value; renderAll(); });
+
+    $('#btnRefresh').addEventListener('click', ()=>{
+      // demo "refresh": just re-render
+      renderAll();
+      openDetailModal('Aggiornato ✅', `
+        <p><b>Dashboard aggiornata</b> (demo).</p>
+        <p class="muted">Nella versione reale: ricarica dati via API in base ai filtri.</p>
+        <div class="rowBtns"><button class="btn" id="okClose2">Chiudi</button></div>
+      `);
+      $('#okClose2').addEventListener('click', closeModal);
+    });
+
+    $('#btnPrimary').addEventListener('click', ()=>{
+      if(state.view === 'vendite'){
+        openDetailModal('Nuovo Lead (demo)', `
+          <div class="two">
+            <div class="field"><label>Nome</label><input placeholder="Nome" /></div>
+            <div class="field"><label>Cognome</label><input placeholder="Cognome" /></div>
+          </div>
+          <div class="two" style="margin-top:12px">
+            <div class="field"><label>Telefono</label><input placeholder="+39…" /></div>
+            <div class="field"><label>Email</label><input placeholder="email@…" /></div>
+          </div>
+          <div class="two" style="margin-top:12px">
+            <div class="field">
+              <label>Sorgente</label>
+              <select>
+                <option>OptyShop</option>
+                <option>Aziende TG Calabria</option>
+                <option>TGImmobiliare</option>
+                <option>MyDoctor+</option>
+                <option>JobsTG Calabria</option>
+              </select>
+            </div>
+            <div class="field">
+              <label>Assegna a</label>
+              <select>
+                <option>Mario Rossi</option>
+                <option>Anna Bianchi</option>
+                <option>Luca Verdi</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label>Note</label>
+            <textarea placeholder="Note…"></textarea>
+          </div>
+          <div class="rowBtns">
+            <button class="btn">💾 Salva</button>
+            <button class="btn ghost" onclick="closeModal()">Annulla</button>
+          </div>
+        `);
+      } else if(state.view === 'chiamate'){
+        openDetailModal('Avvia chiamate (demo)', `
+          <p><b>Modalità chiamate</b> (demo).</p>
+          <p class="muted">Nella versione reale: apre la coda chiamate e propone il prossimo contatto.</p>
+          <div class="rowBtns"><button class="btn" onclick="closeModal()">Ok</button></div>
+        `);
+      } else {
+        openDetailModal('Nuovo Ticket (demo)', `
+          <div class="two">
+            <div class="field"><label>Cliente</label><input placeholder="Nome cliente / azienda" /></div>
+            <div class="field"><label>Canale</label>
+              <select>
+                <option>MyDoctor+</option>
+                <option>OptyShop</option>
+                <option>Telefono</option>
+                <option>Aziende TG Calabria</option>
+                <option>Email</option>
+              </select>
+            </div>
+          </div>
+          <div class="two" style="margin-top:12px">
+            <div class="field"><label>Priorità</label>
+              <select>
+                <option>Bassa</option>
+                <option>Media</option>
+                <option>Alta</option>
+                <option selected>Urgente</option>
+              </select>
+            </div>
+            <div class="field"><label>Assegna a</label>
+              <select>
+                <option>—</option>
+                <option selected>Gianni</option>
+                <option>Paolo</option>
+                <option>Marco</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:12px">
+            <label>Descrizione</label>
+            <textarea placeholder="Descrivi il problema…"></textarea>
+          </div>
+          <div class="rowBtns">
+            <button class="btn">💾 Salva</button>
+            <button class="btn ghost" onclick="closeModal()">Annulla</button>
+          </div>
+        `);
+      }
+    });
+
+    // Init
+    setView('vendite');
+  </script>
+</body>
+</html>
