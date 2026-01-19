@@ -27,15 +27,13 @@ class SignupApprovalService
 
         DB::transaction(function () use ($request, $approver, $selectedProjects, &$results) {
             $company = $request->company;
-            $company->status = 'active';
+            // Set status to 'approved' instead of 'active' - subscription required
+            $company->status = 'approved';
+            $company->subscription_status = 'approved';
             $company->save();
 
-            // Activate the admin user
-            $adminUser = $company->users()->where('role', 'company_admin')->first();
-            if ($adminUser) {
-                $adminUser->status = 'active';
-                $adminUser->save();
-            }
+            // Don't activate the admin user yet - wait for subscription
+            // User will be activated when subscription is completed via webhook
 
             $projects = $selectedProjects ?? $request->requested_projects;
 
@@ -83,6 +81,12 @@ class SignupApprovalService
             $request->api_calls_log = $results;
             $request->save();
         });
+
+        // Send subscription required notification to company admin
+        $adminUser = $request->company->users()->where('role', 'company_admin')->first();
+        if ($adminUser) {
+            $adminUser->notify(new \App\Notifications\SubscriptionRequiredNotification($request->company));
+        }
 
         // Queue retry job for failed projects
         if ($results['partial']) {

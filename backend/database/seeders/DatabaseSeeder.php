@@ -32,6 +32,7 @@ class DatabaseSeeder extends Seeder
         // Seed in order (companies first, then users, then projects, then customers)
         $this->call(CompanySeeder::class);
         $this->call(ProjectSeeder::class);
+        $this->call(SubscriptionPlanSeeder::class);
         $this->call(UserSeeder::class);
         $this->call(CustomerSeeder::class);
 

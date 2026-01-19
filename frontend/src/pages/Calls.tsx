@@ -33,6 +33,7 @@ export default function Calls() {
   const [callsToday, setCallsToday] = useState<CallToday[]>([]);
   const [operators, setOperators] = useState<Operator[]>([]);
   const [loading, setLoading] = useState(true);
+  const [initiatingCallId, setInitiatingCallId] = useState<number | null>(null);
   const [showCallModal, setShowCallModal] = useState(false);
   const [selectedCall, setSelectedCall] = useState<CallToday | null>(null);
   const [callFormData, setCallFormData] = useState({
@@ -230,12 +231,63 @@ export default function Calls() {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-right">
-                        <button
-                          onClick={() => handleCallClick(call)}
-                          className="px-3 py-1.5 text-xs border border-line rounded-lg hover:bg-aqua-1/30 transition-colors text-ink font-medium"
-                        >
-                          CALL
-                        </button>
+                        <div className="flex items-center justify-end gap-2">
+                          {call.phone && (
+                            <button
+                              type="button"
+                              disabled={initiatingCallId === call.id}
+                              onClick={async (e) => {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                console.log('Call Now button clicked for call:', call.id, 'Phone:', call.phone, 'Status:', call.status);
+                                
+                                if (initiatingCallId === call.id) {
+                                  console.log('Call already being initiated for this call');
+                                  return;
+                                }
+
+                                setInitiatingCallId(call.id);
+                                
+                                try {
+                                  console.log('Initiating call for:', call.id, call.phone);
+                                  const response = await api.post(`/calls/${call.id}/initiate`, {
+                                    phone_number: call.phone,
+                                  });
+                                  console.log('Call initiated successfully:', response.data);
+                                  alert('Call initiated! The phone will ring shortly.');
+                                  setTimeout(() => {
+                                    fetchData(); // Refresh to update status
+                                  }, 1000);
+                                } catch (error: any) {
+                                  console.error('Failed to initiate call:', error);
+                                  const errorMsg = error.response?.data?.message || error.message || 'Failed to initiate call. Please check Twilio configuration.';
+                                  alert(errorMsg);
+                                } finally {
+                                  setInitiatingCallId(null);
+                                }
+                              }}
+                              className={`px-3 py-1.5 text-xs rounded-lg transition-colors font-medium ${
+                                initiatingCallId === call.id
+                                  ? 'bg-gray-400 text-white cursor-not-allowed'
+                                  : 'bg-green-500 text-white hover:bg-green-600 cursor-pointer'
+                              }`}
+                              title={initiatingCallId === call.id ? 'Initiating call...' : `Start Phone Call to ${call.phone}`}
+                            >
+                              {initiatingCallId === call.id ? '⏳ Calling...' : '📞 Call Now'}
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleCallClick(call);
+                            }}
+                            className="px-3 py-1.5 text-xs border border-line rounded-lg hover:bg-aqua-1/30 transition-colors text-ink font-medium"
+                          >
+                            {call.status === 'completed' ? 'VIEW' : 'COMPLETE'}
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))}

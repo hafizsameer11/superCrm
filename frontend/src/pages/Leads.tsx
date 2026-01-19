@@ -14,6 +14,22 @@ interface Lead {
   assigned_to?: string;
 }
 
+interface FollowUp {
+  id: number;
+  customer_id: number;
+  opportunity_id?: number;
+  title: string;
+  notes?: string;
+  type: 'call' | 'email' | 'meeting' | 'message' | 'other';
+  status: 'scheduled' | 'completed' | 'cancelled' | 'overdue';
+  priority: 'low' | 'medium' | 'high' | 'urgent';
+  scheduled_at: string;
+  completed_at?: string;
+  outcome?: string;
+  created_by?: { id: number; name: string };
+  assignee?: { id: number; name: string };
+}
+
 export default function Leads() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,6 +48,18 @@ export default function Leads() {
     status: 'cold',
     value: '',
     assigned_to: '',
+  });
+  const [showFollowUpModal, setShowFollowUpModal] = useState(false);
+  const [selectedLeadId, setSelectedLeadId] = useState<number | null>(null);
+  const [followUps, setFollowUps] = useState<Record<number, FollowUp[]>>({});
+  const [editingFollowUp, setEditingFollowUp] = useState<FollowUp | null>(null);
+  const [followUpFormData, setFollowUpFormData] = useState({
+    title: '',
+    notes: '',
+    type: 'call' as FollowUp['type'],
+    priority: 'medium' as FollowUp['priority'],
+    scheduled_at: '',
+    outcome: '',
   });
 
   // Debounce search
@@ -76,6 +104,12 @@ export default function Leads() {
 
   const handleCreateLead = async () => {
     try {
+      // Validate required fields
+      if (!formData.name || !formData.email || !formData.phone) {
+        alert('Please fill in all required fields (Name, Email, Phone)');
+        return;
+      }
+
       const payload: any = {
         name: formData.name,
         email: formData.email,
@@ -91,13 +125,22 @@ export default function Leads() {
         payload.value = parseFloat(formData.value);
       }
 
-      await api.post('/leads', payload);
+      const response = await api.post('/leads', payload);
+      console.log('Lead created successfully:', response.data);
+      
       setShowCreateModal(false);
       resetForm();
-      fetchLeads();
-    } catch (error) {
+      await fetchLeads(); // Refresh the list
+      
+      // Show success message
+      alert('Lead created successfully!');
+    } catch (error: any) {
       console.error('Failed to create lead:', error);
-      alert('Failed to create lead. Please try again.');
+      const errorMessage = error.response?.data?.message || 
+                          error.response?.data?.error || 
+                          error.message || 
+                          'Failed to create lead. Please try again.';
+      alert(`Error: ${errorMessage}`);
     }
   };
 
@@ -181,6 +224,160 @@ export default function Leads() {
       source: 'all',
       search: '',
     });
+  };
+
+  const fetchFollowUps = async (leadId: number) => {
+    try {
+      const response = await api.get(`/customers/${leadId}/follow-ups`);
+      setFollowUps(prev => ({ ...prev, [leadId]: response.data }));
+    } catch (error) {
+      console.error('Failed to fetch follow-ups:', error);
+    }
+  };
+
+  const handleCreateFollowUp = async () => {
+    if (!selectedLeadId) return;
+
+    try {
+      if (!followUpFormData.title || !followUpFormData.scheduled_at) {
+        alert('Please fill in title and scheduled date');
+        return;
+      }
+
+      const payload = {
+        title: followUpFormData.title,
+        notes: followUpFormData.notes || null,
+        type: followUpFormData.type,
+        priority: followUpFormData.priority,
+        scheduled_at: followUpFormData.scheduled_at,
+      };
+
+      await api.post(`/customers/${selectedLeadId}/follow-ups`, payload);
+      setShowFollowUpModal(false);
+      resetFollowUpForm();
+      await fetchFollowUps(selectedLeadId);
+      alert('Follow-up scheduled successfully!');
+    } catch (error: any) {
+      console.error('Failed to create follow-up:', error);
+      alert(error.response?.data?.message || 'Failed to create follow-up');
+    }
+  };
+
+  const handleCompleteFollowUp = async (followUpId: number, leadId: number) => {
+    try {
+      const outcome = prompt('Enter outcome/notes:');
+      if (outcome === null) return; // User cancelled
+
+      await api.post(`/follow-ups/${followUpId}/complete`, { outcome });
+      await fetchFollowUps(leadId);
+      alert('Follow-up marked as completed!');
+    } catch (error: any) {
+      console.error('Failed to complete follow-up:', error);
+      alert(error.response?.data?.message || 'Failed to complete follow-up');
+    }
+  };
+
+  const handleDeleteFollowUp = async (followUpId: number, leadId: number) => {
+    if (!confirm('Are you sure you want to delete this follow-up?')) return;
+
+    try {
+      await api.delete(`/follow-ups/${followUpId}`);
+      await fetchFollowUps(leadId);
+    } catch (error: any) {
+      console.error('Failed to delete follow-up:', error);
+      alert(error.response?.data?.message || 'Failed to delete follow-up');
+    }
+  };
+
+  const handleStartCall = async (followUp: FollowUp | null, leadId: number) => {
+    try {
+      const lead = leads.find(l => l.id === leadId);
+      if (!lead) {
+        alert('Lead not found');
+        return;
+      }
+
+      if (!lead.phone) {
+        alert('No phone number available for this lead');
+        return;
+      }
+
+      // Create a call record with status "in_progress"
+      const callPayload: any = {
+        customer_id: leadId, // Lead ID is the customer ID
+        contact_name: lead.name,
+        contact_phone: lead.phone,
+        source: lead.source || 'Direct',
+        priority: followUp?.priority || 'medium',
+        status: 'in_progress',
+        scheduled_at: followUp?.scheduled_at || new Date().toISOString(),
+      };
+
+      // Add opportunity_id if available from follow-up
+      if (followUp?.opportunity_id) {
+        callPayload.opportunity_id = followUp.opportunity_id;
+      }
+
+      // Add notes if from follow-up
+      if (followUp) {
+        callPayload.notes = `Call started from follow-up: ${followUp.title}${followUp.notes ? '\n' + followUp.notes : ''}`;
+      } else {
+        callPayload.notes = `Call started directly from Leads page`;
+      }
+
+      const response = await api.post('/calls', callPayload);
+      
+      alert(`Call started! Call ID: ${response.data.id}\n\nYou can complete the call from the Calls page.`);
+      
+      // Optionally navigate to Calls page or refresh follow-ups if called from follow-up modal
+      if (followUp && selectedLeadId) {
+        await fetchFollowUps(selectedLeadId);
+      }
+      
+    } catch (error: any) {
+      console.error('Failed to start call:', error);
+      alert(error.response?.data?.message || 'Failed to start call. Please try again.');
+    }
+  };
+
+  const resetFollowUpForm = () => {
+    setFollowUpFormData({
+      title: '',
+      notes: '',
+      type: 'call',
+      priority: 'medium',
+      scheduled_at: '',
+      outcome: '',
+    });
+    setEditingFollowUp(null);
+    setSelectedLeadId(null);
+  };
+
+  const openFollowUpModal = (leadId: number) => {
+    setSelectedLeadId(leadId);
+    setShowFollowUpModal(true);
+    fetchFollowUps(leadId);
+  };
+
+  const getFollowUpTypeIcon = (type: FollowUp['type']) => {
+    const icons = {
+      call: '📞',
+      email: '📧',
+      meeting: '🤝',
+      message: '💬',
+      other: '📝',
+    };
+    return icons[type] || '📝';
+  };
+
+  const getPriorityColor = (priority: FollowUp['priority']) => {
+    const colors = {
+      low: 'text-muted',
+      medium: 'text-ink',
+      high: 'text-warn',
+      urgent: 'text-bad',
+    };
+    return colors[priority] || 'text-ink';
   };
 
   // Get unique sources from leads for filter dropdown
@@ -311,6 +508,22 @@ export default function Leads() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-end gap-2">
+                      {lead.phone && (
+                        <button 
+                          onClick={() => handleStartCall(null, lead.id)}
+                          className="p-1.5 hover:bg-blue-100 rounded-lg transition-colors text-blue-600" 
+                          title="Start Call Now"
+                        >
+                          📞
+                        </button>
+                      )}
+                      <button 
+                        onClick={() => openFollowUpModal(lead.id)}
+                        className="p-1.5 hover:bg-aqua-1 rounded-lg transition-colors" 
+                        title="Follow-ups"
+                      >
+                        📅
+                      </button>
                       <button 
                         onClick={() => openEditModal(lead)}
                         className="p-1.5 hover:bg-aqua-1 rounded-lg transition-colors" 
@@ -436,6 +649,191 @@ export default function Leads() {
               >
                 {editingLead ? 'Update' : 'Create'}
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Follow-ups Modal */}
+      {showFollowUpModal && selectedLeadId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-2xl mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-xl font-bold text-ink">Follow-ups</h2>
+              <button
+                onClick={() => {
+                  setShowFollowUpModal(false);
+                  resetFollowUpForm();
+                }}
+                className="text-muted hover:text-ink"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Follow-ups List */}
+            <div className="mb-6 space-y-3 max-h-64 overflow-y-auto">
+              {followUps[selectedLeadId]?.length > 0 ? (
+                followUps[selectedLeadId].map((followUp) => (
+                  <div
+                    key={followUp.id}
+                    className={`p-4 border rounded-xl ${
+                      followUp.status === 'completed' ? 'bg-green-50 border-green-200' :
+                      followUp.status === 'overdue' ? 'bg-red-50 border-red-200' :
+                      'bg-white border-line'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-lg">{getFollowUpTypeIcon(followUp.type)}</span>
+                          <span className="font-semibold text-ink">{followUp.title}</span>
+                          <span className={`text-xs px-2 py-0.5 rounded ${getPriorityColor(followUp.priority)} bg-opacity-10`}>
+                            {followUp.priority}
+                          </span>
+                          <span className={`text-xs px-2 py-0.5 rounded ${
+                            followUp.status === 'completed' ? 'bg-green-100 text-green-800' :
+                            followUp.status === 'overdue' ? 'bg-red-100 text-red-800' :
+                            'bg-blue-100 text-blue-800'
+                          }`}>
+                            {followUp.status}
+                          </span>
+                        </div>
+                        {followUp.notes && (
+                          <p className="text-sm text-muted mb-2">{followUp.notes}</p>
+                        )}
+                        <div className="text-xs text-muted">
+                          Scheduled: {new Date(followUp.scheduled_at).toLocaleString()}
+                          {followUp.completed_at && (
+                            <> • Completed: {new Date(followUp.completed_at).toLocaleString()}</>
+                          )}
+                        </div>
+                        {followUp.outcome && (
+                          <div className="mt-2 text-sm text-ink bg-gray-50 p-2 rounded">
+                            <strong>Outcome:</strong> {followUp.outcome}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex gap-2 ml-4">
+                        {followUp.type === 'call' && followUp.status === 'scheduled' && (
+                          <button
+                            onClick={() => handleStartCall(followUp, selectedLeadId)}
+                            className="px-3 py-1 text-xs bg-blue-500 text-white rounded-lg hover:bg-blue-600 flex items-center gap-1"
+                            title="Start Call"
+                          >
+                            📞 Start Call
+                          </button>
+                        )}
+                        {followUp.status !== 'completed' && (
+                          <button
+                            onClick={() => handleCompleteFollowUp(followUp.id, selectedLeadId)}
+                            className="px-3 py-1 text-xs bg-green-500 text-white rounded-lg hover:bg-green-600"
+                          >
+                            ✓ Complete
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleDeleteFollowUp(followUp.id, selectedLeadId)}
+                          className="px-3 py-1 text-xs bg-red-500 text-white rounded-lg hover:bg-red-600"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center text-muted py-8">No follow-ups scheduled</div>
+              )}
+            </div>
+
+            {/* Create Follow-up Form */}
+            <div className="border-t border-line pt-4">
+              <h3 className="font-semibold text-ink mb-4">Schedule New Follow-up</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">Title *</label>
+                  <input
+                    type="text"
+                    value={followUpFormData.title}
+                    onChange={(e) => setFollowUpFormData({ ...followUpFormData, title: e.target.value })}
+                    className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    placeholder="e.g., Call to discuss pricing"
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-1">Type *</label>
+                    <select
+                      value={followUpFormData.type}
+                      onChange={(e) => setFollowUpFormData({ ...followUpFormData, type: e.target.value as FollowUp['type'] })}
+                      className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    >
+                      <option value="call">📞 Call</option>
+                      <option value="email">📧 Email</option>
+                      <option value="meeting">🤝 Meeting</option>
+                      <option value="message">💬 Message</option>
+                      <option value="other">📝 Other</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-ink mb-1">Priority</label>
+                    <select
+                      value={followUpFormData.priority}
+                      onChange={(e) => setFollowUpFormData({ ...followUpFormData, priority: e.target.value as FollowUp['priority'] })}
+                      className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    >
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">Scheduled Date & Time *</label>
+                  <input
+                    type="datetime-local"
+                    value={followUpFormData.scheduled_at}
+                    onChange={(e) => setFollowUpFormData({ ...followUpFormData, scheduled_at: e.target.value })}
+                    className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">Notes</label>
+                  <textarea
+                    value={followUpFormData.notes}
+                    onChange={(e) => setFollowUpFormData({ ...followUpFormData, notes: e.target.value })}
+                    className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    rows={3}
+                    placeholder="Additional notes about this follow-up..."
+                  />
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => {
+                      setShowFollowUpModal(false);
+                      resetFollowUpForm();
+                    }}
+                    className="flex-1 px-4 py-2 border border-line rounded-xl hover:bg-aqua-1/30 transition-colors text-ink font-medium"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleCreateFollowUp}
+                    className="flex-1 px-4 py-2 bg-aqua-5 text-white rounded-xl hover:bg-aqua-4 transition-colors font-semibold"
+                  >
+                    Schedule Follow-up
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>

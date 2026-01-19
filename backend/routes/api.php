@@ -18,6 +18,8 @@ use App\Http\Controllers\Api\CustomFieldController;
 use App\Http\Controllers\Api\SupportTicketController;
 use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\CampaignController;
+use App\Http\Controllers\Api\SubscriptionController;
+use App\Http\Controllers\Api\FollowUpController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -25,6 +27,9 @@ use Illuminate\Support\Facades\Route;
 Route::post('/auth/login', [AuthController::class, 'login']);
 Route::post('/signup-requests', [SignupRequestController::class, 'store']); // Public company registration
 Route::get('/projects/public', [ProjectController::class, 'publicList']); // Public project list for registration
+Route::get('/subscription-plans', [SubscriptionController::class, 'plans']); // Public subscription plans
+Route::get('/subscription/success', [SubscriptionController::class, 'success']); // Public - Stripe redirects here
+Route::post('/subscription/activate', [SubscriptionController::class, 'activateSubscription']); // Public - called after Stripe payment
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -59,6 +64,14 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Leads
     Route::apiResource('leads', LeadController::class);
+    
+    // Follow-ups for leads
+    Route::get('/customers/{customer}/follow-ups', [FollowUpController::class, 'index']);
+    Route::post('/customers/{customer}/follow-ups', [FollowUpController::class, 'store']);
+    Route::put('/follow-ups/{followUp}', [FollowUpController::class, 'update']);
+    Route::post('/follow-ups/{followUp}/complete', [FollowUpController::class, 'complete']);
+    Route::delete('/follow-ups/{followUp}', [FollowUpController::class, 'destroy']);
+    Route::get('/follow-ups/upcoming', [FollowUpController::class, 'upcoming']);
 
     // Dashboard
     Route::get('/dashboard/kpis', [DashboardController::class, 'kpis']);
@@ -103,12 +116,13 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::apiResource('custom-fields', CustomFieldController::class);
     Route::post('/custom-fields/{customField}/values', [CustomFieldController::class, 'setValue']);
 
-    // Calls
-    Route::apiResource('calls', CallController::class);
+    // Calls - Specific routes must come BEFORE apiResource to avoid route conflicts
     Route::get('/calls/stats', [CallController::class, 'stats']);
     Route::get('/calls/operators', [CallController::class, 'operators']);
     Route::get('/calls/today', [CallController::class, 'today']);
+    Route::apiResource('calls', CallController::class);
     Route::post('/calls/{call}/complete', [CallController::class, 'complete']);
+    Route::post('/calls/{call}/initiate', [CallController::class, 'initiateCall']);
 
     // Support Tickets
     Route::apiResource('support-tickets', SupportTicketController::class);
@@ -118,4 +132,22 @@ Route::middleware('auth:sanctum')->group(function () {
     // Campaigns
     Route::apiResource('campaigns', CampaignController::class);
     Route::get('/campaigns/stats', [CampaignController::class, 'stats']);
+
+    // Subscriptions
+    Route::get('/subscription', [SubscriptionController::class, 'index']);
+    Route::post('/subscription/checkout', [SubscriptionController::class, 'createCheckoutSession']); // Legacy - can be removed
+    Route::post('/subscription/renewal-checkout', [SubscriptionController::class, 'createRenewalCheckout']);
+    Route::get('/subscription/cancel', [SubscriptionController::class, 'cancel']);
+    Route::post('/subscription/cancel-subscription', [SubscriptionController::class, 'cancelSubscription']);
+
+    // Subscription Plans Management (Super Admin only)
+    Route::get('/subscription-plans/admin', [SubscriptionController::class, 'listPlans']);
+    Route::post('/subscription-plans', [SubscriptionController::class, 'createPlan']);
+    Route::put('/subscription-plans/{plan}', [SubscriptionController::class, 'updatePlan']);
+    Route::delete('/subscription-plans/{plan}', [SubscriptionController::class, 'deletePlan']);
 });
+
+// Webhooks (no auth required)
+Route::post('/subscription/webhook', [SubscriptionController::class, 'webhook']);
+Route::post('/calls/twilio/status', [CallController::class, 'twilioStatusWebhook']);
+Route::get('/calls/twilio/twiml', [CallController::class, 'twilioTwiML']);

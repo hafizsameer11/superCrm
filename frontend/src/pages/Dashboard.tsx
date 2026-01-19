@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Topbar from '../components/layout/Topbar';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -44,6 +45,7 @@ interface HotLead {
 }
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [kpis, setKpis] = useState<KPIs | null>(null);
   const [leadSources, setLeadSources] = useState<LeadSource[]>([]);
   const [topOperators, setTopOperators] = useState<TopOperator[]>([]);
@@ -132,7 +134,10 @@ export default function Dashboard() {
             >
               Refresh
             </button>
-            <button className="px-4 py-2 text-sm border border-aqua-5/35 bg-gradient-to-r from-aqua-3/45 to-aqua-5/14 rounded-xl hover:shadow-lg hover:shadow-aqua-5/10 transition-all text-ink font-semibold">
+            <button 
+              onClick={() => navigate('/leads')}
+              className="px-4 py-2 text-sm border border-aqua-5/35 bg-gradient-to-r from-aqua-3/45 to-aqua-5/14 rounded-xl hover:shadow-lg hover:shadow-aqua-5/10 transition-all text-ink font-semibold"
+            >
               ➕ New Lead
             </button>
           </>

@@ -17,7 +17,27 @@ export default function Login() {
 
     try {
       await login(email, password);
-      navigate('/dashboard');
+      // Check if subscription is needed after login
+      const user = useAuthStore.getState().user;
+      if (user?.company && user.role !== 'super_admin') {
+        const subscriptionStatus = user.company.subscription_status;
+        const companyStatus = user.company.status;
+        const hasActiveSubscription = subscriptionStatus === 'active';
+        
+        // Needs subscription if company is approved OR active but no active subscription
+        const needsSubscription = !hasActiveSubscription && 
+                                 (companyStatus === 'approved' || 
+                                  subscriptionStatus === 'approved' ||
+                                  (companyStatus === 'active' && subscriptionStatus !== 'active'));
+        
+        if (needsSubscription) {
+          navigate('/subscribe');
+        } else {
+          navigate('/dashboard');
+        }
+      } else {
+        navigate('/dashboard');
+      }
     } catch (err: any) {
       setError(err.response?.data?.message || 'Login failed. Please check your credentials.');
     } finally {

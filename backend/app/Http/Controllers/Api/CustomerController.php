@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\ActivityLog;
 use App\Services\CustomerDeduplicationService;
 use Illuminate\Http\Request;
 
@@ -74,7 +75,7 @@ class CustomerController extends Controller
     }
 
     /**
-     * Display the specified customer.
+     * Display the specified customer with all CRM data.
      */
     public function show(Request $request, Customer $customer)
     {
@@ -85,7 +86,42 @@ class CustomerController extends Controller
             abort(403, 'Access denied');
         }
 
-        return response()->json($customer);
+        // Load all related CRM data
+        $customer->load([
+            'opportunities.assignee',
+            'tasks.assignee',
+            'tasks.creator',
+            'notes.user',
+            'documents.user',
+            'company'
+        ]);
+
+        // Get activity logs for this customer
+        $activityLogs = ActivityLog::where('model_type', Customer::class)
+            ->where('model_id', $customer->id)
+            ->with(['user'])
+            ->orderBy('created_at', 'desc')
+            ->limit(50)
+            ->get();
+
+        // Calculate statistics
+        $stats = [
+            'opportunities_count' => $customer->opportunities()->count(),
+            'open_opportunities_count' => $customer->opportunities()->open()->count(),
+            'total_opportunities_value' => $customer->opportunities()->sum('value'),
+            'tasks_count' => $customer->tasks()->count(),
+            'pending_tasks_count' => $customer->tasks()->pending()->count(),
+            'completed_tasks_count' => $customer->tasks()->completed()->count(),
+            'notes_count' => $customer->notes()->count(),
+            'documents_count' => $customer->documents()->count(),
+            'activity_logs_count' => $activityLogs->count(),
+        ];
+
+        return response()->json([
+            'customer' => $customer,
+            'stats' => $stats,
+            'activity_logs' => $activityLogs,
+        ]);
     }
 
     /**

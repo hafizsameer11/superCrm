@@ -9,9 +9,13 @@ import Marketing from './pages/Marketing';
 import Companies from './pages/Companies';
 import Projects from './pages/Projects';
 import Customers from './pages/Customers';
+import CustomerDetail from './pages/CustomerDetail';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import ProjectIframePage from './pages/ProjectIframePage';
+import Subscribe from './pages/Subscribe';
+import SubscriptionSuccess from './pages/SubscriptionSuccess';
+import SubscriptionCancel from './pages/SubscriptionCancel';
 import Layout from './components/layout/Layout';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -32,6 +36,14 @@ export const router = createBrowserRouter([
   {
     path: '/register',
     element: <Register />,
+  },
+  {
+    path: '/subscription/success',
+    element: <SubscriptionSuccess />,
+  },
+  {
+    path: '/subscription/cancel',
+    element: <SubscriptionCancel />,
   },
   {
     path: '/',
@@ -74,6 +86,10 @@ export const router = createBrowserRouter([
         element: <Customers />,
       },
       {
+        path: 'customers/:id',
+        element: <CustomerDetail />,
+      },
+      {
         path: 'projects',
         element: <Projects />,
       },
@@ -92,6 +108,10 @@ export const router = createBrowserRouter([
       {
         path: 'settings',
         element: <Settings />,
+      },
+      {
+        path: 'subscribe',
+        element: <Subscribe />,
       },
     ],
   },

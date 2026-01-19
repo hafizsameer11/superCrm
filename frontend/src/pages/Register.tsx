@@ -156,6 +156,7 @@ export default function Register() {
             <p className="text-muted mb-6">
               Your company registration request has been submitted successfully. 
               Our team will review your request and you'll receive an email once it's approved.
+              After approval, you'll need to complete your subscription to activate your account.
             </p>
             <Link to="/login">
               <Button variant="primary">Go to Login</Button>

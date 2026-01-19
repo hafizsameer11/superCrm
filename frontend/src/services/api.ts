@@ -30,6 +30,13 @@ api.interceptors.response.use(
       // Unauthorized - clear token and redirect to login
       localStorage.removeItem('auth_token');
       window.location.href = '/login';
+    } else if (error.response?.status === 402) {
+      // Payment Required - redirect to subscription page
+      const isSubscriptionPage = window.location.pathname.startsWith('/subscribe') || 
+                                 window.location.pathname.startsWith('/subscription');
+      if (!isSubscriptionPage) {
+        window.location.href = '/subscribe';
+      }
     }
     return Promise.reject(error);
   }

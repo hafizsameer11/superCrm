@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import Topbar from '../components/layout/Topbar';
 
@@ -16,6 +17,7 @@ interface Customer {
 }
 
 export default function Customers() {
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -240,6 +242,13 @@ export default function Customers() {
                   </td>
                   <td className="py-3 px-4">
                     <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => navigate(`/customers/${customer.id}`)}
+                        className="p-1.5 hover:bg-aqua-1 rounded-lg transition-colors" 
+                        title="View Details"
+                      >
+                        👁️
+                      </button>
                       <button 
                         onClick={() => openEditModal(customer)}
                         className="p-1.5 hover:bg-aqua-1 rounded-lg transition-colors" 

@@ -2,6 +2,14 @@ import { useEffect, useState } from 'react';
 import api from '../services/api';
 import Topbar from '../components/layout/Topbar';
 
+interface User {
+  id: number;
+  name: string;
+  email: string;
+  role: string;
+  status: string;
+}
+
 interface Company {
   id: number;
   name: string;
@@ -10,6 +18,7 @@ interface Company {
   status: string;
   created_at?: string;
   updated_at?: string;
+  users?: User[];
   project_accesses?: ProjectAccess[];
   signup_request?: {
     id: number;
@@ -24,6 +33,7 @@ interface Project {
   id: number;
   name: string;
   slug: string;
+  description?: string;
   integration_type: string;
   is_active: boolean;
 }
@@ -553,6 +563,21 @@ export default function Companies() {
                 <div>
                   <label className="block text-sm font-medium text-muted mb-1">Address</label>
                   <p className="text-ink">{viewingCompany.address}</p>
+                </div>
+              )}
+
+              {viewingCompany.users && viewingCompany.users.length > 0 && (
+                <div>
+                  <label className="block text-sm font-medium text-muted mb-1">Company Admin Email</label>
+                  {(() => {
+                    const adminUser = viewingCompany.users?.find((u) => u.role === 'company_admin');
+                    const displayUser = adminUser || viewingCompany.users?.[0];
+                    return displayUser ? (
+                      <p className="text-ink">{displayUser.email}</p>
+                    ) : (
+                      <p className="text-ink">-</p>
+                    );
+                  })()}
                 </div>
               )}
 

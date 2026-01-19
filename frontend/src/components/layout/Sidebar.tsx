@@ -44,6 +44,22 @@ export default function Sidebar() {
     { path: '/settings', label: 'Settings', icon: '⚙️', roles: ['super_admin', 'company_admin'] },
   ];
 
+  // Add subscription link if company needs subscription
+  const hasActiveSubscription = user?.company?.subscription_status === 'active';
+  const needsSubscription = user?.company && !hasActiveSubscription &&
+                           (user.company.status === 'approved' || 
+                            user.company.subscription_status === 'approved' ||
+                            (user.company.status === 'active' && user.company.subscription_status !== 'active'));
+  
+  if (needsSubscription && user?.role !== 'super_admin') {
+    navItems.push({ 
+      path: '/subscribe', 
+      label: 'Subscribe', 
+      icon: '💳', 
+      roles: ['company_admin', 'manager', 'staff'] 
+    });
+  }
+
   const filteredNavItems = navItems.filter(
     (item) => hasRoleAccess(item.roles) && hasModuleAccess(item.modules)
   );
@@ -95,22 +111,6 @@ export default function Sidebar() {
           );
         })}
       </nav>
-
-      {/* Quick Actions */}
-      <div className="p-3 border-t border-line">
-        <div className="text-xs font-semibold text-muted mb-2 px-2">Quick Actions</div>
-        <div className="flex flex-wrap gap-2">
-          <button className="text-xs px-3 py-1.5 rounded-lg border border-line bg-white hover:bg-aqua-1/30 transition-colors text-ink font-medium">
-            ➕ New Lead
-          </button>
-          <button className="text-xs px-3 py-1.5 rounded-lg border border-line bg-white hover:bg-aqua-1/30 transition-colors text-ink font-medium">
-            📞 Start Calls
-          </button>
-          <button className="text-xs px-3 py-1.5 rounded-lg border border-line bg-white hover:bg-aqua-1/30 transition-colors text-ink font-medium">
-            🛠️ New Ticket
-          </button>
-        </div>
-      </div>
 
       {/* User Info */}
       <div className="p-4 border-t border-line bg-aqua-1/20">

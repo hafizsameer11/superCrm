@@ -15,6 +15,8 @@ class Company extends Model
         'vat',
         'address',
         'status',
+        'subscription_status',
+        'stripe_customer_id',
         'settings',
     ];
 
@@ -55,6 +57,33 @@ class Company extends Model
     public function signupRequests()
     {
         return $this->hasMany(SignupRequest::class);
+    }
+
+    /**
+     * Get the subscription for the company.
+     */
+    public function subscription()
+    {
+        return $this->hasOne(Subscription::class);
+    }
+
+    /**
+     * Check if company has active subscription.
+     */
+    public function hasActiveSubscription(): bool
+    {
+        // Check subscription_status first (faster)
+        if ($this->subscription_status === 'active') {
+            return true;
+        }
+        
+        // Also check the subscription relationship
+        if ($this->relationLoaded('subscription') && $this->subscription) {
+            return $this->subscription->isActive();
+        }
+        
+        // If relationship not loaded, check database
+        return $this->subscription()->where('status', 'active')->exists();
     }
 
     /**

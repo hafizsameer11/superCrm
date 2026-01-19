@@ -17,6 +17,7 @@ export interface User {
     id: number;
     name: string;
     status: string;
+    subscription_status?: string;
   };
 }
 

@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Opportunity;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
 
 class CallController extends Controller
@@ -344,5 +345,130 @@ class CallController extends Controller
     {
         $call->delete();
         return response()->json(null, 204);
+    }
+
+    /**
+     * Initiate a phone call using Twilio.
+     */
+    public function initiateCall(Request $request, Call $call)
+    {
+        $user = $request->user();
+
+        // Check access
+        if (!$user->isSuperAdmin() && $call->company_id !== $user->company_id) {
+            return response()->json(['message' => 'Access denied'], 403);
+        }
+
+        // Validate phone number
+        $toPhone = $request->input('phone_number') ?? $call->contact_phone;
+        if (!$toPhone) {
+            return response()->json([
+                'message' => 'Phone number is required',
+            ], 400);
+        }
+
+        try {
+            $twilioService = app(\App\Services\TwilioService::class);
+            $result = $twilioService->initiateCall($call, $toPhone);
+
+            return response()->json([
+                'message' => 'Call initiated successfully',
+                'call_sid' => $result['call_sid'],
+                'status' => $result['status'],
+                'call' => $call->fresh()->load(['user', 'customer', 'opportunity']),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to initiate call', [
+                'call_id' => $call->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'message' => 'Failed to initiate call',
+                'error' => config('app.debug') ? $e->getMessage() : 'Internal server error',
+            ], 500);
+        }
+    }
+
+    /**
+     * Handle Twilio status webhook.
+     */
+    public function twilioStatusWebhook(Request $request)
+    {
+        $callSid = $request->input('CallSid');
+        $callStatus = $request->input('CallStatus');
+        $callDuration = $request->input('CallDuration');
+        $to = $request->input('To');
+        $from = $request->input('From');
+
+        Log::info('Twilio status webhook received', [
+            'call_sid' => $callSid,
+            'status' => $callStatus,
+            'duration' => $callDuration,
+        ]);
+
+        // Find call by Twilio SID (stored in notes)
+        $call = Call::where('notes', 'like', "%Twilio Call SID: {$callSid}%")->first();
+
+        if (!$call) {
+            // Try to find by phone number and recent time
+            $call = Call::where('contact_phone', $to)
+                ->where('status', 'in_progress')
+                ->where('started_at', '>=', now()->subMinutes(30))
+                ->latest()
+                ->first();
+        }
+
+        if ($call) {
+            $updateData = [];
+
+            // Update status based on Twilio status
+            $statusMap = [
+                'queued' => 'scheduled',
+                'ringing' => 'in_progress',
+                'in-progress' => 'in_progress',
+                'completed' => 'completed',
+                'busy' => 'busy',
+                'no-answer' => 'no_answer',
+                'failed' => 'cancelled',
+                'canceled' => 'cancelled',
+            ];
+
+            if (isset($statusMap[$callStatus])) {
+                $updateData['status'] = $statusMap[$callStatus];
+            }
+
+            // Update completed_at if call is completed
+            if ($callStatus === 'completed') {
+                $updateData['completed_at'] = now();
+                if ($callDuration) {
+                    $updateData['duration_seconds'] = (int) $callDuration;
+                }
+            }
+
+            $call->update($updateData);
+        }
+
+        // Return TwiML response (Twilio expects 200 OK)
+        return response('OK', 200);
+    }
+
+    /**
+     * Generate TwiML for Twilio calls.
+     */
+    public function twilioTwiML(Request $request)
+    {
+        $callId = $request->input('call_id');
+        $call = Call::find($callId);
+
+        $message = 'Hello, this is a call from your CRM.';
+        if ($call && $call->notes) {
+            $message = 'Calling regarding: ' . ($call->contact_name ?? 'your inquiry');
+        }
+
+        $twilioService = app(\App\Services\TwilioService::class);
+        $twiml = $twilioService->generateTwiML($message);
+
+        return response($twiml, 200)->header('Content-Type', 'text/xml');
     }
 }

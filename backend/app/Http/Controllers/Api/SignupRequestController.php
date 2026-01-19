@@ -154,8 +154,9 @@ class SignupRequestController extends Controller
         $result = $this->approvalService->approveSignupRequest($signupRequest, $user, $selectedProjects);
 
         return response()->json([
-            'message' => 'Signup request approved',
+            'message' => 'Signup request approved. Company must complete subscription to activate account.',
             'result' => $result,
+            'subscription_required' => true,
         ]);
     }
 
