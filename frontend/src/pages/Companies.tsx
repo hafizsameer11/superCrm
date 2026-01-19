@@ -11,6 +11,13 @@ interface Company {
   created_at?: string;
   updated_at?: string;
   project_accesses?: ProjectAccess[];
+  signup_request?: {
+    id: number;
+    status: string;
+    requested_projects: Project[];
+    requested_at: string;
+    reviewed_at?: string;
+  };
 }
 
 interface Project {
@@ -208,6 +215,10 @@ export default function Companies() {
       // Fetch full company details
       const response = await api.get(`/companies/${company.id}`);
       const companyData = response.data;
+      
+      // Debug: Log the response to see what we're getting
+      console.log('Company data from API:', companyData);
+      console.log('Signup request data:', companyData.signup_request);
       
       // Fetch project accesses
       try {
@@ -556,6 +567,42 @@ export default function Companies() {
                 <div>
                   <label className="block text-sm font-medium text-muted mb-1">Created At</label>
                   <p className="text-ink text-sm">{new Date(viewingCompany.created_at).toLocaleString()}</p>
+                </div>
+              )}
+
+              {/* Requested Projects Section */}
+              {viewingCompany.signup_request && (
+                <div className="border-t border-line pt-4 mt-4">
+                  <label className="block text-sm font-semibold text-ink mb-3">Requested Projects</label>
+                  {viewingCompany.signup_request.requested_projects && viewingCompany.signup_request.requested_projects.length > 0 ? (
+                    <>
+                      <div className="space-y-2 mb-4">
+                        {viewingCompany.signup_request.requested_projects.map((project: Project) => (
+                          <div key={project.id} className="flex items-center justify-between p-3 bg-cyan-50 border border-cyan-200 rounded-lg">
+                            <div className="flex-1">
+                              <div className="font-medium text-sm text-ink">{project.name}</div>
+                              {project.description && (
+                                <div className="text-xs text-muted mt-1">{project.description}</div>
+                              )}
+                              <div className="text-xs text-cyan-600 mt-1">
+                                Type: {project.integration_type}
+                              </div>
+                            </div>
+                            <span className="text-xs px-2 py-1 bg-warn/20 text-warn border border-warn/30 rounded-full font-medium">
+                              Requested
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      {viewingCompany.signup_request.requested_at && (
+                        <p className="text-xs text-muted">
+                          Requested on {new Date(viewingCompany.signup_request.requested_at).toLocaleString()}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-sm text-muted">No projects were requested during registration.</p>
+                  )}
                 </div>
               )}
 

@@ -17,6 +17,18 @@ class ProjectController extends Controller
     ) {}
 
     /**
+     * Display a public list of active projects (for registration form).
+     */
+    public function publicList(Request $request)
+    {
+        $projects = Project::where('is_active', true)
+            ->select('id', 'name', 'description', 'slug')
+            ->get();
+
+        return response()->json($projects);
+    }
+
+    /**
      * Display a listing of accessible projects.
      */
     public function index(Request $request)

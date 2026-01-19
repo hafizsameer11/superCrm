@@ -14,12 +14,12 @@ return new class extends Migration
         Schema::create('notifications', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('type');
-            $table->morphs('notifiable');
+            $table->morphs('notifiable'); // This already creates the index on notifiable_type and notifiable_id
             $table->text('data');
             $table->timestamp('read_at')->nullable();
             $table->timestamps();
-            
-            $table->index(['notifiable_type', 'notifiable_id']);
+
+            // Index on read_at for filtering unread notifications
             $table->index('read_at');
         });
     }

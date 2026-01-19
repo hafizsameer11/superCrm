@@ -23,6 +23,8 @@ use Illuminate\Support\Facades\Route;
 
 // Public routes
 Route::post('/auth/login', [AuthController::class, 'login']);
+Route::post('/signup-requests', [SignupRequestController::class, 'store']); // Public company registration
+Route::get('/projects/public', [ProjectController::class, 'publicList']); // Public project list for registration
 
 // Protected routes
 Route::middleware('auth:sanctum')->group(function () {
@@ -37,9 +39,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::delete('/companies/{company}/projects/{projectId}', [CompanyController::class, 'revokeProjectAccess']); // Super admin only
     Route::put('/companies/{company}/projects/{projectId}', [CompanyController::class, 'updateProjectAccess']); // Super admin only
 
-    // Signup Requests
+    // Signup Requests (Admin only - viewing and approval)
     Route::get('/signup-requests', [SignupRequestController::class, 'index']);
-    Route::post('/signup-requests', [SignupRequestController::class, 'store']);
     Route::put('/signup-requests/{signupRequest}/approve', [SignupRequestController::class, 'approve']);
     Route::put('/signup-requests/{signupRequest}/reject', [SignupRequestController::class, 'reject']);
 

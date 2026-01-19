@@ -39,7 +39,7 @@ return new class extends Migration
             $table->softDeletes();
             
             $table->index(['company_id', 'created_at']);
-            $table->index(['noteable_type', 'noteable_id']);
+            // Note: nullableMorphs('noteable') already creates index on noteable_type and noteable_id
             $table->index('user_id');
             $table->index('is_pinned');
         });

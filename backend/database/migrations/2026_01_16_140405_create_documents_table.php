@@ -47,7 +47,7 @@ return new class extends Migration
             $table->softDeletes();
             
             $table->index(['company_id', 'created_at']);
-            $table->index(['documentable_type', 'documentable_id']);
+            // Note: nullableMorphs('documentable') already creates index on documentable_type and documentable_id
             $table->index('category');
             $table->index('status');
         });

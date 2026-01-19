@@ -40,7 +40,7 @@ return new class extends Migration
             $table->timestamps();
             
             $table->unique(['tag_id', 'taggable_type', 'taggable_id'], 'unique_tag');
-            $table->index(['taggable_type', 'taggable_id']);
+            // Note: morphs('taggable') already creates index on taggable_type and taggable_id
         });
     }
 

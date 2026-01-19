@@ -53,7 +53,7 @@ return new class extends Migration
             $table->index(['company_id', 'status']);
             $table->index(['assigned_to', 'status']);
             $table->index('due_date');
-            $table->index(['taskable_type', 'taskable_id']);
+            // Note: nullableMorphs('taskable') already creates index on taskable_type and taskable_id
         });
     }
 

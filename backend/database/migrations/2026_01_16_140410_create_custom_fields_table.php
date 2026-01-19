@@ -59,7 +59,7 @@ return new class extends Migration
             $table->timestamps();
             
             $table->unique(['custom_field_id', 'fieldable_type', 'fieldable_id'], 'unique_field_value');
-            $table->index(['fieldable_type', 'fieldable_id']);
+            // Note: morphs('fieldable') already creates index on fieldable_type and fieldable_id
         });
     }
 

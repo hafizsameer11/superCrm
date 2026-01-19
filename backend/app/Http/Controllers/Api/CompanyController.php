@@ -78,9 +78,36 @@ class CompanyController extends Controller
             abort(403, 'Access denied');
         }
 
-        $company->load('users', 'projectAccesses.project', 'customers');
+        $company->load('users', 'projectAccesses.project', 'customers', 'signupRequests');
 
-        return response()->json($company);
+        // Get the latest signup request with requested projects
+        $signupRequest = $company->signupRequests()->latest()->first();
+        
+        $responseData = $company->toArray();
+        
+        if ($signupRequest) {
+            // Get requested projects (can be empty array)
+            $requestedProjectIds = $signupRequest->requested_projects ?? [];
+            
+            $requestedProjects = [];
+            if (!empty($requestedProjectIds) && is_array($requestedProjectIds)) {
+                // Load the actual project details for requested projects
+                $requestedProjects = \App\Models\Project::whereIn('id', $requestedProjectIds)
+                    ->select('id', 'name', 'slug', 'description', 'integration_type')
+                    ->get()
+                    ->toArray();
+            }
+            
+            $responseData['signup_request'] = [
+                'id' => $signupRequest->id,
+                'status' => $signupRequest->status,
+                'requested_projects' => $requestedProjects,
+                'requested_at' => $signupRequest->created_at?->toISOString(),
+                'reviewed_at' => $signupRequest->reviewed_at?->toISOString(),
+            ];
+        }
+
+        return response()->json($responseData);
     }
 
     /**
