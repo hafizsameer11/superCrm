@@ -96,6 +96,12 @@ class UserController extends Controller
         ];
 
         $newUser = User::create($userData);
+        
+        // Store plain password (encrypted) for external API use
+        if (isset($validated['password'])) {
+            $newUser->setPlainPassword($validated['password']);
+            $newUser->save();
+        }
 
         return response()->json($newUser->load('company'), 201);
     }
@@ -112,7 +118,18 @@ class UserController extends Controller
             abort(403, 'Access denied');
         }
 
-        return response()->json($user->load('company'));
+        $userData = $user->load('company')->toArray();
+        
+        // Include plain password (decrypted) for admin viewing
+        // Only super admin and company admin can see plain password
+        if ($currentUser->isSuperAdmin() || $currentUser->isCompanyAdmin()) {
+            $plainPassword = $user->getPlainPassword();
+            if ($plainPassword) {
+                $userData['plain_password'] = $plainPassword;
+            }
+        }
+
+        return response()->json($userData);
     }
 
     /**
@@ -153,13 +170,21 @@ class UserController extends Controller
         }
 
         // Update password if provided
+        $plainPassword = null;
         if (isset($validated['password'])) {
+            $plainPassword = $validated['password'];
             $validated['password'] = Hash::make($validated['password']);
         } else {
             unset($validated['password']);
         }
 
         $user->update($validated);
+        
+        // Store plain password (encrypted) for external API use if password was updated
+        if ($plainPassword !== null) {
+            $user->setPlainPassword($plainPassword);
+            $user->save();
+        }
 
         return response()->json($user->load('company'));
     }
@@ -194,5 +219,46 @@ class UserController extends Controller
         $user->delete();
 
         return response()->json(['message' => 'User deleted successfully'], 204);
+    }
+
+    /**
+     * Get plain password for the current user (for external API login).
+     */
+    public function getPlainPassword(Request $request, User $user)
+    {
+        $currentUser = $request->user();
+
+        // Users can get their own plain password, or admins can get any user's password
+        if ($user->id !== $currentUser->id && !$currentUser->isSuperAdmin() && !$currentUser->isCompanyAdmin()) {
+            \Illuminate\Support\Facades\Log::warning('Access denied to plain password', [
+                'requested_user_id' => $user->id,
+                'current_user_id' => $currentUser->id,
+                'current_user_role' => $currentUser->role,
+            ]);
+            abort(403, 'Access denied');
+        }
+
+        // Check company access for non-super-admins
+        if (!$currentUser->isSuperAdmin() && $user->company_id !== $currentUser->company_id) {
+            \Illuminate\Support\Facades\Log::warning('Company access denied for plain password', [
+                'requested_user_company_id' => $user->company_id,
+                'current_user_company_id' => $currentUser->company_id,
+            ]);
+            abort(403, 'Access denied');
+        }
+
+        $plainPassword = $user->getPlainPassword();
+
+        \Illuminate\Support\Facades\Log::info('Plain password requested', [
+            'user_id' => $user->id,
+            'requested_by' => $currentUser->id,
+            'has_password' => !empty($plainPassword),
+        ]);
+
+        if ($plainPassword) {
+            return response()->json(['plain_password' => $plainPassword]);
+        }
+
+        return response()->json(['message' => 'Plain password not found or could not be decrypted'], 404);
     }
 }

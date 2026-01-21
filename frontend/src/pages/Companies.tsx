@@ -253,15 +253,52 @@ export default function Companies() {
     if (!viewingCompany || !selectedProjectId) return;
 
     try {
-      await api.post(`/companies/${viewingCompany.id}/projects/grant`, {
+      const response = await api.post(`/companies/${viewingCompany.id}/projects/grant`, {
         project_id: selectedProjectId,
         status: 'active',
       });
+      
+      console.log('Grant project access response:', response.data);
+      
+      // Check for registration result
+      if (response.data.registration_result) {
+        const regResult = response.data.registration_result;
+        console.log('Registration result:', regResult);
+        
+        if (regResult.results) {
+          const { success, failed, total } = regResult.results;
+          const successCount = Array.isArray(success) ? success.length : 0;
+          const failedCount = Array.isArray(failed) ? failed.length : 0;
+          
+          if (successCount > 0) {
+            alert(`Successfully registered ${successCount} out of ${total} users to doctor project.`);
+          }
+          if (failedCount > 0) {
+            console.warn('Some users failed to register:', failed);
+            
+            // Show detailed error messages
+            const errorMessages = failed.map((f: any) => {
+              let msg = `${f.name} (${f.email}): ${f.error}`;
+              if (f.error_details) {
+                const details = Object.entries(f.error_details)
+                  .map(([key, value]: [string, any]) => `${key}: ${Array.isArray(value) ? value.join(', ') : value}`)
+                  .join('; ');
+                msg += ` - ${details}`;
+              }
+              return msg;
+            }).join('\n');
+            
+            alert(`Warning: ${failedCount} users failed to register:\n\n${errorMessages}`);
+          }
+        }
+      }
+      
       setShowProjectAccessModal(false);
       setSelectedProjectId(null);
       openViewModal(viewingCompany); // Refresh company data
     } catch (error: any) {
       console.error('Failed to grant project access:', error);
+      console.error('Error response:', error.response?.data);
       alert(error.response?.data?.message || 'Failed to grant project access');
     }
   };

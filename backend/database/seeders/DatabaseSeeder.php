@@ -35,6 +35,9 @@ class DatabaseSeeder extends Seeder
         $this->call(SubscriptionPlanSeeder::class);
         $this->call(UserSeeder::class);
         $this->call(CustomerSeeder::class);
+        
+        // Create test data for doctor project (optional - for testing)
+        $this->call(DoctorTestSeeder::class);
 
         $this->command->info('');
         $this->command->info('✅ Database seeded successfully!');
@@ -44,5 +47,6 @@ class DatabaseSeeder extends Seeder
         $this->command->info('  Company Admin: admin@alpha.com / password');
         $this->command->info('  Manager: manager@alpha.com / password');
         $this->command->info('  Staff: staff@alpha.com / password');
+        $this->command->info('  Doctor Test User: sohaib@gmail.com / 11221122');
     }
 }

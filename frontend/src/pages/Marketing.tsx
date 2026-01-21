@@ -637,17 +637,7 @@ export default function Marketing() {
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
-                          {(isSuperAdmin || campaign.creator?.id === user?.id) && (
-                            <button
-                              onClick={() => {
-                                setEditingCampaign(campaign);
-                                setShowModal(true);
-                              }}
-                              className="text-xs text-aqua-5 hover:text-aqua-4 font-medium"
-                            >
-                              Edit
-                            </button>
-                          )}
+                         
                           {isSuperAdmin && (
                             <select
                               value={campaign.status}
@@ -662,6 +652,26 @@ export default function Marketing() {
                               <option value="cancelled">Cancelled</option>
                             </select>
                           )}
+                         
+                        </div>
+                      
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center gap-2">
+                          {(isSuperAdmin || campaign.creator?.id === user?.id) && (
+                            <button
+                              onClick={() => {
+                                setEditingCampaign(campaign);
+                                setShowModal(true);
+                              }}
+                              className="text-xs text-aqua-5 hover:text-aqua-4 font-medium"
+                            >
+                              Edit
+                            </button>
+                          )}
+                         
                           {(isSuperAdmin || campaign.creator?.id === user?.id) && (
                             <button
                               onClick={() => handleDelete(campaign.id)}
@@ -690,6 +700,7 @@ export default function Marketing() {
                         )}
                       </div>
                     </td>
+
                   </tr>
                 ))
               )}

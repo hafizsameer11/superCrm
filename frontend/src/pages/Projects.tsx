@@ -76,6 +76,12 @@ export default function Projects() {
         return;
       }
       
+      // Special handling for doctor project (mydoctor)
+      if (project.slug === 'mydoctor') {
+        navigate(`/projects/${projectId}/doctor`);
+        return;
+      }
+      
       if (project.integration_type === 'iframe') {
         navigate(`/projects/${projectId}/iframe`);
       } else {

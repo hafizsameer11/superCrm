@@ -33,6 +33,25 @@ class OpportunityController extends Controller
         if ($request->has('customer_id')) {
             $query->where('customer_id', $request->customer_id);
         }
+        if ($request->has('project_id')) {
+            $projectId = $request->project_id;
+            // For non-super-admin, validate they have access to the project
+            if (!$user->isSuperAdmin() && !$user->hasProjectAccess($projectId)) {
+                return response()->json([
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
+            $query->where('project_id', $projectId);
+        } elseif (!$user->isSuperAdmin()) {
+            // For non-super-admin, filter opportunities to only show projects they have access to
+            $accessibleProjectIds = $user->getAccessibleProjectIds();
+            if (empty($accessibleProjectIds)) {
+                // User has no project access, return empty result
+                $query->whereRaw('1 = 0'); // Force no results
+            } else {
+                $query->whereIn('project_id', $accessibleProjectIds);
+            }
+        }
         if ($request->has('search')) {
             $search = $request->search;
             $query->where(function ($q) use ($search) {
@@ -68,6 +87,14 @@ class OpportunityController extends Controller
         ]);
 
         $user = $request->user();
+        
+        // Validate project access if project_id is provided
+        if (isset($validated['project_id']) && !$user->hasProjectAccess($validated['project_id'])) {
+            return response()->json([
+                'message' => 'You do not have access to this project',
+            ], 403);
+        }
+        
         $validated['company_id'] = $user->company_id;
         $validated['created_by'] = $user->id;
 
@@ -92,6 +119,8 @@ class OpportunityController extends Controller
 
     public function update(Request $request, Opportunity $opportunity)
     {
+        $user = $request->user();
+        
         $validated = $request->validate([
             'customer_id' => 'nullable|exists:customers,id',
             'project_id' => 'nullable|exists:projects,id',
@@ -108,6 +137,13 @@ class OpportunityController extends Controller
             'close_reason' => 'nullable|string',
             'loss_reason' => 'nullable|string',
         ]);
+
+        // Validate project access if project_id is being updated
+        if (isset($validated['project_id']) && !$user->hasProjectAccess($validated['project_id'])) {
+            return response()->json([
+                'message' => 'You do not have access to this project',
+            ], 403);
+        }
 
         $oldValues = $opportunity->getAttributes();
 

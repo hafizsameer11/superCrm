@@ -13,6 +13,7 @@ import CustomerDetail from './pages/CustomerDetail';
 import Users from './pages/Users';
 import Settings from './pages/Settings';
 import ProjectIframePage from './pages/ProjectIframePage';
+import DoctorProject from './pages/DoctorProject';
 import Subscribe from './pages/Subscribe';
 import SubscriptionSuccess from './pages/SubscriptionSuccess';
 import SubscriptionCancel from './pages/SubscriptionCancel';
@@ -96,6 +97,10 @@ export const router = createBrowserRouter([
       {
         path: 'projects/:projectId/iframe',
         element: <ProjectIframePage />,
+      },
+      {
+        path: 'projects/:projectId/doctor',
+        element: <DoctorProject />,
       },
       {
         path: 'companies',

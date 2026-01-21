@@ -40,6 +40,7 @@ Route::middleware('auth:sanctum')->group(function () {
 
     // Users
     Route::apiResource('users', UserController::class);
+    Route::get('/users/{user}/plain-password', [UserController::class, 'getPlainPassword']);
 
     // Companies
     Route::apiResource('companies', CompanyController::class);
@@ -47,6 +48,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/companies/{company}/projects/grant', [CompanyController::class, 'grantProjectAccess']); // Super admin only
     Route::delete('/companies/{company}/projects/{projectId}', [CompanyController::class, 'revokeProjectAccess']); // Super admin only
     Route::put('/companies/{company}/projects/{projectId}', [CompanyController::class, 'updateProjectAccess']); // Super admin only
+    Route::post('/companies/{company}/projects/{projectId}/register-users', [CompanyController::class, 'registerUsersToProject']); // Super admin only - manual registration trigger
 
     // Signup Requests (Admin only - viewing and approval)
     Route::get('/signup-requests', [SignupRequestController::class, 'index']);

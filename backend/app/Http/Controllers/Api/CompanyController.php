@@ -165,10 +165,31 @@ class CompanyController extends Controller
         }
 
         $accesses = \App\Models\CompanyProjectAccess::where('company_id', $company->id)
-            ->with('project')
+            ->with(['project', 'projectUsers.user'])
             ->get();
 
-        return response()->json($accesses);
+        // Include project users in response
+        $accessesData = $accesses->map(function ($access) {
+            $accessData = $access->toArray();
+            $accessData['project_users'] = $access->projectUsers->map(function ($pu) {
+                return [
+                    'id' => $pu->id,
+                    'user_id' => $pu->user_id,
+                    'user' => $pu->user ? [
+                        'id' => $pu->user->id,
+                        'name' => $pu->user->name,
+                        'email' => $pu->user->email,
+                        'role' => $pu->user->role,
+                    ] : null,
+                    'external_user_id' => $pu->external_user_id,
+                    'external_username' => $pu->external_username,
+                    'status' => $pu->status,
+                ];
+            });
+            return $accessData;
+        });
+
+        return response()->json($accessesData);
     }
 
     /**
@@ -187,6 +208,8 @@ class CompanyController extends Controller
             'project_id' => 'required|exists:projects,id',
             'status' => 'sometimes|in:pending,active,suspended,revoked',
             'api_credentials' => 'nullable|array',
+            'api_credentials.api_key' => 'nullable|string',
+            'api_credentials.api_secret' => 'nullable|string',
             'external_company_id' => 'nullable|string|max:255',
         ]);
 
@@ -196,6 +219,8 @@ class CompanyController extends Controller
             ->first();
 
         if ($existingAccess) {
+            $oldStatus = $existingAccess->status;
+            
             // Update existing access
             $existingAccess->update([
                 'status' => $validated['status'] ?? 'active',
@@ -204,12 +229,90 @@ class CompanyController extends Controller
                 'approved_by' => $user->id,
             ]);
 
-            if (isset($validated['api_credentials'])) {
+            // Store API credentials if provided
+            if (isset($validated['api_credentials']) && !empty($validated['api_credentials'])) {
+                \Illuminate\Support\Facades\Log::info('Updating API credentials for project access', [
+                    'access_id' => $existingAccess->id,
+                    'has_api_key' => isset($validated['api_credentials']['api_key']),
+                    'has_api_secret' => isset($validated['api_credentials']['api_secret']),
+                ]);
                 $existingAccess->setEncryptedApiCredentials($validated['api_credentials']);
                 $existingAccess->save();
             }
 
-            return response()->json($existingAccess->load('project'));
+            // Load project relationship
+            $existingAccess->load('project');
+            $project = $existingAccess->project;
+
+            \Illuminate\Support\Facades\Log::info('Updating existing project access', [
+                'access_id' => $existingAccess->id,
+                'company_id' => $company->id,
+                'project_id' => $project->id ?? null,
+                'project_slug' => $project->slug ?? null,
+                'old_status' => $oldStatus,
+                'new_status' => $existingAccess->status,
+            ]);
+
+            // Create company_project_users entries if they don't exist
+            $this->createCompanyProjectUsers($existingAccess);
+            
+            // Refresh access but keep project relationship
+            $existingAccess->refresh();
+            $existingAccess->load('project');
+            $project = $existingAccess->project; // Re-assign after refresh
+
+            $registrationResult = null;
+            
+            // Register users to doctor project if status is active (always try if it's doctor project)
+            $newStatus = $existingAccess->status;
+            if ($newStatus === 'active' && $project && $project->slug === 'mydoctor') {
+                \Illuminate\Support\Facades\Log::info('Doctor project detected (update), proceeding with registration', [
+                    'access_id' => $existingAccess->id,
+                    'project_id' => $project->id,
+                    'project_slug' => $project->slug,
+                    'access_status' => $newStatus,
+                    'old_status' => $oldStatus,
+                ]);
+                try {
+                    \Illuminate\Support\Facades\Log::info('Attempting to register users for doctor project (update)', [
+                        'access_id' => $existingAccess->id,
+                        'project_id' => $project->id,
+                        'project_slug' => $project->slug,
+                    ]);
+                    
+                    $registrationService = app(\App\Services\DoctorProjectRegistrationService::class);
+                    $registrationResult = $registrationService->registerUsersForDoctorProject($existingAccess);
+                    
+                    \Illuminate\Support\Facades\Log::info('Registration result (update)', [
+                        'access_id' => $existingAccess->id,
+                        'result' => $registrationResult,
+                    ]);
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to register users to doctor project', [
+                        'access_id' => $existingAccess->id,
+                        'project_id' => $project->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    
+                    $registrationResult = [
+                        'success' => false,
+                        'message' => 'Registration failed: ' . $e->getMessage(),
+                    ];
+                }
+            }
+
+            $responseData = $existingAccess->load(['project', 'projectUsers.user'])->toArray();
+            if ($registrationResult) {
+                $responseData['registration_result'] = $registrationResult;
+            }
+
+            \Illuminate\Support\Facades\Log::info('Project access updated successfully', [
+                'access_id' => $existingAccess->id,
+                'has_registration_result' => !is_null($registrationResult),
+            ]);
+
+            return response()->json($responseData);
         }
 
         // Create new access
@@ -227,7 +330,68 @@ class CompanyController extends Controller
             $access->save();
         }
 
-        return response()->json($access->load('project'), 201);
+        // Load project relationship
+        $access->load('project');
+        $project = $access->project;
+
+        // Create company_project_users entries for all active users in the company
+        $this->createCompanyProjectUsers($access);
+        
+        // Refresh access but keep project relationship
+        $access->refresh();
+        $access->load('project');
+        $project = $access->project; // Re-assign after refresh
+
+        $registrationResult = null;
+        
+        // Register users to doctor project if this is the doctor project and access is active
+        if ($access->status === 'active' && $project && $project->slug === 'mydoctor') {
+            \Illuminate\Support\Facades\Log::info('Doctor project detected, proceeding with registration', [
+                'access_id' => $access->id,
+                'project_id' => $project->id,
+                'project_slug' => $project->slug,
+                'access_status' => $access->status,
+            ]);
+            try {
+                \Illuminate\Support\Facades\Log::info('Attempting to register users for doctor project', [
+                    'access_id' => $access->id,
+                    'project_id' => $project->id,
+                    'project_slug' => $project->slug,
+                ]);
+                
+                $registrationService = app(\App\Services\DoctorProjectRegistrationService::class);
+                $registrationResult = $registrationService->registerUsersForDoctorProject($access);
+                
+                \Illuminate\Support\Facades\Log::info('Registration result', [
+                    'access_id' => $access->id,
+                    'result' => $registrationResult,
+                ]);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to register users to doctor project', [
+                    'access_id' => $access->id,
+                    'project_id' => $project->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                
+                $registrationResult = [
+                    'success' => false,
+                    'message' => 'Registration failed: ' . $e->getMessage(),
+                ];
+            }
+        }
+
+        $responseData = $access->load(['project', 'projectUsers.user'])->toArray();
+        if ($registrationResult) {
+            $responseData['registration_result'] = $registrationResult;
+        }
+
+        \Illuminate\Support\Facades\Log::info('Project access created successfully', [
+            'access_id' => $access->id,
+            'has_registration_result' => !is_null($registrationResult),
+        ]);
+
+        return response()->json($responseData, 201);
     }
 
     /**
@@ -276,5 +440,116 @@ class CompanyController extends Controller
         $access->update($validated);
 
         return response()->json($access->load('project'));
+    }
+
+    /**
+     * Create company_project_users entries for all active users in the company.
+     */
+    private function createCompanyProjectUsers(\App\Models\CompanyProjectAccess $access): void
+    {
+        // Load company relationship if not loaded
+        if (!$access->relationLoaded('company')) {
+            $access->load('company');
+        }
+        
+        $company = $access->company;
+        
+        if (!$company) {
+            \Illuminate\Support\Facades\Log::error('Company not found for creating project users', [
+                'access_id' => $access->id,
+                'company_id' => $access->company_id,
+            ]);
+            return;
+        }
+        
+        // Get all active users in the company
+        $users = \App\Models\User::where('company_id', $company->id)
+            ->where('status', 'active')
+            ->get();
+
+        \Illuminate\Support\Facades\Log::info('Creating company_project_users entries', [
+            'access_id' => $access->id,
+            'company_id' => $company->id,
+            'users_found' => $users->count(),
+            'user_ids' => $users->pluck('id')->toArray(),
+        ]);
+
+        $createdCount = 0;
+        foreach ($users as $user) {
+            // Create company_project_user entry if it doesn't exist
+            $projectUser = \App\Models\CompanyProjectUser::firstOrCreate(
+                [
+                    'company_project_access_id' => $access->id,
+                    'user_id' => $user->id,
+                ],
+                [
+                    'status' => 'active',
+                ]
+            );
+            
+            if ($projectUser->wasRecentlyCreated) {
+                $createdCount++;
+            }
+        }
+
+        \Illuminate\Support\Facades\Log::info('Created company_project_users entries', [
+            'access_id' => $access->id,
+            'company_id' => $company->id,
+            'total_users' => $users->count(),
+            'newly_created' => $createdCount,
+            'already_existed' => $users->count() - $createdCount,
+        ]);
+    }
+
+    /**
+     * Manually trigger user registration for a project (for debugging/testing).
+     */
+    public function registerUsersToProject(Request $request, Company $company, int $projectId)
+    {
+        $user = $request->user();
+
+        // Only super admin can trigger registration
+        if (!$user->isSuperAdmin()) {
+            abort(403, 'Only super admin can trigger user registration');
+        }
+
+        $access = \App\Models\CompanyProjectAccess::where('company_id', $company->id)
+            ->where('project_id', $projectId)
+            ->firstOrFail();
+
+        $access->load('project');
+        $project = $access->project;
+
+        if ($project->slug !== 'mydoctor') {
+            return response()->json([
+                'success' => false,
+                'message' => 'This endpoint is only for doctor project',
+            ], 400);
+        }
+
+        // Ensure company_project_users entries exist
+        $this->createCompanyProjectUsers($access);
+        $access->refresh();
+
+        try {
+            $registrationService = app(\App\Services\DoctorProjectRegistrationService::class);
+            $result = $registrationService->registerUsersForDoctorProject($access);
+
+            return response()->json([
+                'success' => $result['success'],
+                'message' => $result['message'] ?? 'Registration completed',
+                'results' => $result['results'] ?? null,
+            ]);
+        } catch (\Exception $e) {
+            \Illuminate\Support\Facades\Log::error('Failed to register users', [
+                'access_id' => $access->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return response()->json([
+                'success' => false,
+                'message' => 'Registration failed: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

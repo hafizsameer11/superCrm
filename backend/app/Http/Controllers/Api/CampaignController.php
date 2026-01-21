@@ -42,7 +42,23 @@ class CampaignController extends Controller
             $query->where('type', $request->type);
         }
         if ($request->has('project_id')) {
-            $query->where('project_id', $request->project_id);
+            $projectId = $request->project_id;
+            // For non-super-admin, validate they have access to the project
+            if (!$user->isSuperAdmin() && !$user->hasProjectAccess($projectId)) {
+                return response()->json([
+                    'message' => 'You do not have access to this project',
+                ], 403);
+            }
+            $query->where('project_id', $projectId);
+        } elseif (!$user->isSuperAdmin()) {
+            // For non-super-admin, filter campaigns to only show projects they have access to
+            $accessibleProjectIds = $user->getAccessibleProjectIds();
+            if (empty($accessibleProjectIds)) {
+                // User has no project access, return empty result
+                $query->whereRaw('1 = 0'); // Force no results
+            } else {
+                $query->whereIn('project_id', $accessibleProjectIds);
+            }
         }
         if ($request->has('search')) {
             $search = $request->search;
@@ -85,6 +101,14 @@ class CampaignController extends Controller
         ]);
 
         $user = $request->user();
+        
+        // Validate project access if project_id is provided
+        if (isset($validated['project_id']) && !$user->hasProjectAccess($validated['project_id'])) {
+            return response()->json([
+                'message' => 'You do not have access to this project',
+            ], 403);
+        }
+        
         $validated['company_id'] = $user->company_id;
         $validated['created_by'] = $user->id;
         // Always set status to 'draft' (pending) when creating - admin will approve later
@@ -107,6 +131,8 @@ class CampaignController extends Controller
 
     public function update(Request $request, Campaign $campaign)
     {
+        $user = $request->user();
+        
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'name' => 'sometimes|string|max:255',
@@ -127,6 +153,13 @@ class CampaignController extends Controller
             'track_clicks' => 'sometimes|boolean',
             'track_opens' => 'sometimes|boolean',
         ]);
+
+        // Validate project access if project_id is being updated
+        if (isset($validated['project_id']) && !$user->hasProjectAccess($validated['project_id'])) {
+            return response()->json([
+                'message' => 'You do not have access to this project',
+            ], 403);
+        }
 
         $oldValues = $campaign->getAttributes();
 

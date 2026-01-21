@@ -17,6 +17,8 @@ class CompanyProjectUser extends Model
         'external_user_id',
         'external_username',
         'external_role',
+        'external_token',
+        'token_expires_at',
         'status',
         'last_sso_at',
         'revoked_at',
@@ -28,6 +30,7 @@ class CompanyProjectUser extends Model
         return [
             'last_sso_at' => 'datetime',
             'revoked_at' => 'datetime',
+            'token_expires_at' => 'datetime',
         ];
     }
 

@@ -58,13 +58,15 @@ class ProjectController extends Controller
             $projects = $query->with('companyAccesses.company')->get();
         } else {
             // Regular users see only projects they have access to
-            $projectIds = CompanyProjectAccess::where('company_id', $user->company_id)
-                ->where('status', 'active')
-                ->pluck('project_id');
+            $projectIds = $user->getAccessibleProjectIds();
 
-            $projects = Project::whereIn('id', $projectIds)
-                ->active()
-                ->get();
+            if (empty($projectIds)) {
+                $projects = collect([]);
+            } else {
+                $projects = Project::whereIn('id', $projectIds)
+                    ->active()
+                    ->get();
+            }
         }
 
         return response()->json($projects);
@@ -219,6 +221,60 @@ class ProjectController extends Controller
             ->where('project_id', $project->id)
             ->where('status', 'active')
             ->firstOrFail();
+
+        // Special handling for doctor project (mydoctor)
+        if ($project->slug === 'mydoctor') {
+            try {
+                // Get project users from company_project_users
+                $projectUsers = \App\Models\CompanyProjectUser::where('company_project_access_id', $access->id)
+                    ->where('status', 'active')
+                    ->with('user')
+                    ->get();
+                
+                $loginService = app(\App\Services\DoctorProjectLoginService::class);
+                $result = $loginService->loginAndFetchData($access, $user);
+                
+                if ($result['success']) {
+                    return response()->json([
+                        'success' => true,
+                        'project_slug' => 'mydoctor',
+                        'data' => $result['data'],
+                        'project_users' => $projectUsers->map(function ($pu) {
+                            return [
+                                'id' => $pu->id,
+                                'user_id' => $pu->user_id,
+                                'user' => $pu->user ? [
+                                    'id' => $pu->user->id,
+                                    'name' => $pu->user->name,
+                                    'email' => $pu->user->email,
+                                    'role' => $pu->user->role,
+                                ] : null,
+                                'external_user_id' => $pu->external_user_id,
+                                'external_username' => $pu->external_username,
+                                'status' => $pu->status,
+                            ];
+                        }),
+                        'message' => $result['message'] ?? 'Login successful',
+                    ]);
+                } else {
+                    return response()->json([
+                        'success' => false,
+                        'message' => $result['message'] ?? 'Failed to login to doctor project',
+                    ], 400);
+                }
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to login to doctor project', [
+                    'user_id' => $user->id,
+                    'project_id' => $project->id,
+                    'error' => $e->getMessage(),
+                ]);
+                
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Failed to access doctor project: ' . $e->getMessage(),
+                ], 500);
+            }
+        }
 
         // Check rate limit
         if (!$this->rateLimitService->checkRateLimit($access)) {
