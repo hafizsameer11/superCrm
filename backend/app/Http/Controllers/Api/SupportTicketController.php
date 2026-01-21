@@ -64,7 +64,9 @@ class SupportTicketController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
+        $user = $request->user();
+        
+        $validationRules = [
             'customer_id' => 'nullable|exists:customers,id',
             'assigned_to' => 'nullable|exists:users,id',
             'subject' => 'required|string|max:255',
@@ -81,10 +83,22 @@ class SupportTicketController extends Controller
             'tags' => 'nullable|array',
             'first_response_due_at' => 'nullable|date',
             'resolution_due_at' => 'nullable|date',
-        ]);
+        ];
 
-        $user = $request->user();
-        $validated['company_id'] = $user->company_id;
+        // Allow company_id for super_admin
+        if ($user->isSuperAdmin()) {
+            $validationRules['company_id'] = 'required|exists:companies,id';
+        }
+
+        $validated = $request->validate($validationRules);
+
+        // Set company_id: use provided one for super_admin, otherwise use user's company_id
+        if ($user->isSuperAdmin() && isset($validated['company_id'])) {
+            $validated['company_id'] = $validated['company_id'];
+        } else {
+            $validated['company_id'] = $user->company_id;
+        }
+        
         $validated['created_by'] = $user->id;
         $validated['status'] = $validated['status'] ?? 'open';
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import api from '../services/api';
 import { useAuthStore } from '../stores/authStore';
 import Topbar from '../components/layout/Topbar';
@@ -25,17 +25,32 @@ interface Subscription {
 
 export default function Subscribe() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const user = useAuthStore((state) => state.user);
   const [plan, setPlan] = useState<SubscriptionPlan | null>(null);
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loading, setLoading] = useState(true);
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const checkAuth = useAuthStore((state) => state.checkAuth);
 
   useEffect(() => {
-    fetchData();
+    // Check for success message in URL
+    const success = searchParams.get('success');
+    const message = searchParams.get('message');
+    
+    if (success === 'true' && message) {
+      setSuccessMessage(decodeURIComponent(message));
+      // Remove success params from URL
+      setSearchParams({}, { replace: true });
+      // Refresh subscription data
+      fetchData();
+      checkAuth();
+    } else {
+      fetchData();
+    }
     
     // Periodically check subscription status in case webhook processed it
     const interval = setInterval(async () => {
@@ -43,8 +58,8 @@ export default function Subscribe() {
         await checkAuth();
         const currentUser = useAuthStore.getState().user;
         if (currentUser?.company?.subscription_status === 'active') {
-          // Subscription is now active, redirect to dashboard
-          navigate('/dashboard');
+          // Refresh subscription data
+          fetchData();
         }
       } catch (error) {
         console.error('Failed to check subscription status:', error);
@@ -52,7 +67,7 @@ export default function Subscribe() {
     }, 3000); // Check every 3 seconds
 
     return () => clearInterval(interval);
-  }, [checkAuth, navigate]);
+  }, [checkAuth, navigate, searchParams, setSearchParams]);
 
   const fetchData = async () => {
     try {
@@ -220,6 +235,31 @@ export default function Subscribe() {
           </button>
         }
       />
+
+      {successMessage && (
+        <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-xl p-6 shadow-lg">
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+            </div>
+            <div className="flex-1">
+              <h3 className="text-lg font-bold text-green-900 mb-2">Subscription Activated Successfully!</h3>
+              <p className="text-green-800 mb-4">{successMessage}</p>
+              <p className="text-sm text-green-700">
+                Your subscription has been saved to the database and your account is now active. You can now access all features of the platform.
+              </p>
+            </div>
+            <button
+              onClick={() => setSuccessMessage(null)}
+              className="text-green-600 hover:text-green-800"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">

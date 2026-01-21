@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\Company;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
+use App\Models\Campaign;
 use Illuminate\Support\Facades\Log;
 use Stripe\StripeClient;
 use Stripe\Exception\ApiErrorException;
@@ -158,6 +159,116 @@ class StripeService
         }
     }
 
+
+    /**
+     * Create checkout session for campaign payment.
+     */
+    public function createCampaignCheckoutSession(Campaign $campaign): array
+    {
+        try {
+            $company = $campaign->company;
+            
+            // Validate budget
+            if (!$campaign->budget || $campaign->budget <= 0) {
+                throw new \InvalidArgumentException('Campaign budget must be greater than 0');
+            }
+
+            // Ensure company has a Stripe customer ID
+            if (!$company->stripe_customer_id) {
+                $adminUser = $company->users()->where('role', 'company_admin')->first();
+                $email = $adminUser?->email ?? $company->name . '@example.com';
+                $this->createCustomer($company, $email);
+                $company->refresh();
+            }
+
+            $frontendUrl = config('app.frontend_url', env('FRONTEND_URL', 'http://localhost:5173'));
+            $currency = strtolower($campaign->currency ?? 'usd');
+            
+            // Validate currency (Stripe supports 3-letter ISO currency codes)
+            if (strlen($currency) !== 3) {
+                $currency = 'usd'; // Default to USD if invalid
+            }
+            
+            // Convert budget to cents (ensure it's a positive integer)
+            $amount = (int)round($campaign->budget * 100);
+            
+            if ($amount < 50) { // Stripe minimum is $0.50 (50 cents)
+                throw new \InvalidArgumentException('Campaign budget must be at least 0.50 in the selected currency');
+            }
+
+            Log::info('Creating Stripe checkout session for campaign', [
+                'campaign_id' => $campaign->id,
+                'amount' => $amount,
+                'currency' => $currency,
+                'budget' => $campaign->budget,
+            ]);
+
+            $session = $this->stripe->checkout->sessions->create([
+                'customer' => $company->stripe_customer_id,
+                'payment_method_types' => ['card'],
+                'line_items' => [[
+                    'price_data' => [
+                        'currency' => $currency,
+                        'product_data' => [
+                            'name' => 'Campaign Payment: ' . $campaign->name,
+                            'description' => $campaign->description ?? 'Campaign budget payment',
+                        ],
+                        'unit_amount' => $amount,
+                    ],
+                    'quantity' => 1,
+                ]],
+                'mode' => 'payment',
+                'success_url' => $frontendUrl . '/marketing?session_id={CHECKOUT_SESSION_ID}&campaign_id=' . $campaign->id,
+                'cancel_url' => $frontendUrl . '/marketing',
+                'metadata' => [
+                    'company_id' => (string)$company->id,
+                    'campaign_id' => (string)$campaign->id,
+                    'type' => 'campaign_payment',
+                ],
+            ]);
+
+            // Verify session URL exists
+            if (empty($session->url)) {
+                Log::error('Stripe session created but URL is empty', [
+                    'campaign_id' => $campaign->id,
+                    'session_id' => $session->id,
+                ]);
+                throw new \RuntimeException('Stripe checkout session URL is missing');
+            }
+
+            // Update campaign with checkout session ID
+            $campaign->update([
+                'stripe_checkout_session_id' => $session->id,
+                'payment_status' => 'pending',
+            ]);
+
+            Log::info('Stripe checkout session created successfully', [
+                'campaign_id' => $campaign->id,
+                'session_id' => $session->id,
+                'checkout_url' => $session->url,
+                'amount' => $amount,
+                'currency' => $currency,
+            ]);
+
+            return [
+                'session_id' => $session->id,
+                'checkout_url' => $session->url,
+            ];
+        } catch (ApiErrorException $e) {
+            Log::error('Failed to create campaign checkout session', [
+                'campaign_id' => $campaign->id,
+                'error' => $e->getMessage(),
+                'stripe_error' => $e->getStripeCode() ?? null,
+            ]);
+            throw $e;
+        } catch (\Exception $e) {
+            Log::error('Failed to create campaign checkout session', [
+                'campaign_id' => $campaign->id,
+                'error' => $e->getMessage(),
+            ]);
+            throw $e;
+        }
+    }
 
     /**
      * Get a checkout session from Stripe.

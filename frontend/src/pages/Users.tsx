@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import Topbar from '../components/layout/Topbar';
+import { useAuthStore } from '../stores/authStore';
 
 interface User {
   id: number;
@@ -18,11 +19,21 @@ interface User {
   updated_at?: string;
 }
 
+interface Company {
+  id: number;
+  name: string;
+}
+
 export default function Users() {
+  const user = useAuthStore((state) => state.user);
+  const isSuperAdmin = user?.role === 'super_admin';
+  const isCompanyAdmin = user?.role === 'company_admin';
+
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -30,6 +41,7 @@ export default function Users() {
     role: 'staff' as User['role'],
     status: 'active' as User['status'],
     permissions: [] as string[],
+    company_id: null as number | null,
   });
   const [filters, setFilters] = useState({
     search: '',
@@ -49,6 +61,28 @@ export default function Users() {
 
     return () => clearTimeout(timer);
   }, [filters.search]);
+
+  // Fetch companies when modal opens (for super admin and company admin)
+  useEffect(() => {
+    if ((isSuperAdmin || isCompanyAdmin) && showCreateModal) {
+      fetchCompanies();
+    }
+  }, [isSuperAdmin, isCompanyAdmin, showCreateModal]);
+
+  const fetchCompanies = async () => {
+    try {
+      const response = await api.get('/companies', { params: { per_page: 1000 } });
+      const data = response.data.data || response.data || [];
+      setCompanies(Array.isArray(data) ? data : []);
+      
+      // If company admin, set their company_id automatically after fetching
+      if (isCompanyAdmin && user?.company_id) {
+        setFormData(prev => ({ ...prev, company_id: user.company_id || null }));
+      }
+    } catch (error) {
+      console.error('Failed to fetch companies:', error);
+    }
+  };
 
   const fetchUsers = async () => {
     try {
@@ -91,6 +125,11 @@ export default function Users() {
 
       if (formData.permissions.length > 0) {
         payload.permissions = formData.permissions;
+      }
+
+      // Include company_id if super admin selected one
+      if (isSuperAdmin && formData.company_id) {
+        payload.company_id = formData.company_id;
       }
 
       await api.post('/users', payload);
@@ -163,6 +202,7 @@ export default function Users() {
       role: 'staff',
       status: 'active',
       permissions: [],
+      company_id: null,
     });
   };
 
@@ -217,7 +257,10 @@ export default function Users() {
               Export
             </button>
             <button 
-              onClick={() => setShowCreateModal(true)}
+              onClick={() => {
+                resetForm();
+                setShowCreateModal(true);
+              }}
               className="px-4 py-2 text-sm border border-aqua-5/35 bg-gradient-to-r from-aqua-3/45 to-aqua-5/14 rounded-xl hover:shadow-lg hover:shadow-aqua-5/10 transition-all text-ink font-semibold"
             >
               ➕ Invite User
@@ -381,6 +424,29 @@ export default function Users() {
                 )}
               </div>
 
+              {(isSuperAdmin || isCompanyAdmin) && (
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">Company *</label>
+                  <select
+                    value={formData.company_id || ''}
+                    onChange={(e) => setFormData({ ...formData, company_id: e.target.value ? parseInt(e.target.value) : null })}
+                    className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    required
+                    disabled={isCompanyAdmin && !isSuperAdmin}
+                  >
+                    <option value="">Select Company</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                  {isCompanyAdmin && !isSuperAdmin && (
+                    <p className="text-xs text-muted mt-1">Your company is automatically assigned</p>
+                  )}
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">Role *</label>
                 <select
@@ -393,7 +459,7 @@ export default function Users() {
                   <option value="manager">Manager</option>
                   <option value="company_admin">Company Admin</option>
                   <option value="readonly">Read Only</option>
-                  <option value="super_admin">Super Admin</option>
+                  {isSuperAdmin && <option value="super_admin">Super Admin</option>}
                 </select>
               </div>
 

@@ -45,6 +45,21 @@ class CallController extends Controller
         if ($request->has('date')) {
             $query->whereDate('scheduled_at', $request->date);
         }
+        if ($request->has('search')) {
+            $search = $request->search;
+            $query->where(function ($q) use ($search) {
+                $q->where('contact_name', 'like', "%{$search}%")
+                    ->orWhere('contact_phone', 'like', "%{$search}%")
+                    ->orWhere('source', 'like', "%{$search}%")
+                    ->orWhere('notes', 'like', "%{$search}%")
+                    ->orWhereHas('customer', function ($customerQuery) use ($search) {
+                        $customerQuery->where('first_name', 'like', "%{$search}%")
+                            ->orWhere('last_name', 'like', "%{$search}%")
+                            ->orWhere('company_name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    });
+            });
+        }
 
         // Sorting
         $sortBy = $request->get('sort_by', 'scheduled_at');
@@ -258,6 +273,8 @@ class CallController extends Controller
     public function update(Request $request, Call $call)
     {
         $validated = $request->validate([
+            'customer_id' => 'nullable|exists:customers,id',
+            'opportunity_id' => 'nullable|exists:opportunities,id',
             'contact_name' => 'nullable|string|max:255',
             'contact_phone' => 'nullable|string|max:50',
             'source' => 'nullable|string|max:255',
@@ -470,5 +487,263 @@ class CallController extends Controller
         $twiml = $twilioService->generateTwiML($message);
 
         return response($twiml, 200)->header('Content-Type', 'text/xml');
+    }
+
+    /**
+     * Export CSV template for bulk call import.
+     */
+    public function exportTemplate()
+    {
+        $headers = [
+            'contact_name',
+            'contact_phone',
+            'source',
+            'priority',
+            'status',
+            'scheduled_at',
+            'notes',
+            'next_action',
+            'callback_at',
+        ];
+
+        $filename = 'calls_import_template_' . date('Y-m-d_His') . '.csv';
+
+        $callback = function() use ($headers) {
+            $file = fopen('php://output', 'w');
+            
+            // Add BOM for Excel compatibility
+            fprintf($file, chr(0xEF).chr(0xBB).chr(0xBF));
+            
+            // Write headers
+            fputcsv($file, $headers);
+            
+            // Write one example row
+            fputcsv($file, [
+                'John Doe',
+                '+1234567890',
+                'Website',
+                'medium',
+                'scheduled',
+                '2026-01-20 10:00:00',
+                'Initial contact call',
+                'Follow up with proposal',
+                '2026-01-21 14:00:00',
+            ]);
+            
+            fclose($file);
+        };
+
+        return response()->stream($callback, 200, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+            'Content-Disposition' => "attachment; filename=\"{$filename}\"",
+        ]);
+    }
+
+    /**
+     * Import calls from CSV file.
+     */
+    public function importCalls(Request $request)
+    {
+        $request->validate([
+            'file' => 'required|file|mimes:csv,txt|max:10240', // 10MB max
+        ]);
+
+        $user = $request->user();
+        $companyId = $user->isSuperAdmin() && $request->has('company_id')
+            ? $request->company_id
+            : $user->company_id;
+
+        $file = $request->file('file');
+        $path = $file->getRealPath();
+        
+        // Expected headers
+        $expectedHeaders = [
+            'contact_name',
+            'contact_phone',
+            'source',
+            'priority',
+            'status',
+            'scheduled_at',
+            'notes',
+            'next_action',
+            'callback_at',
+        ];
+
+        $errors = [];
+        $successCount = 0;
+        $rowNumber = 0;
+
+        try {
+            $handle = fopen($path, 'r');
+            if ($handle === false) {
+                return response()->json([
+                    'message' => 'Failed to read file',
+                ], 400);
+            }
+
+            // Read and validate headers
+            $firstLine = fgetcsv($handle);
+            if ($firstLine === false) {
+                fclose($handle);
+                return response()->json([
+                    'message' => 'File is empty',
+                ], 400);
+            }
+
+            // Remove BOM if present
+            if (!empty($firstLine[0])) {
+                $firstLine[0] = preg_replace('/^\xEF\xBB\xBF/', '', $firstLine[0]);
+            }
+
+            // Normalize headers (trim and lowercase)
+            $fileHeaders = array_map(function($header) {
+                return strtolower(trim($header));
+            }, $firstLine);
+
+            // Check if all required headers are present
+            $missingHeaders = array_diff($expectedHeaders, $fileHeaders);
+            if (!empty($missingHeaders)) {
+                fclose($handle);
+                return response()->json([
+                    'message' => 'Invalid file format. Missing required headers: ' . implode(', ', $missingHeaders),
+                    'expected_headers' => $expectedHeaders,
+                    'found_headers' => $fileHeaders,
+                ], 400);
+            }
+
+            // Create header mapping
+            $headerMap = [];
+            foreach ($expectedHeaders as $expected) {
+                $index = array_search($expected, $fileHeaders);
+                if ($index !== false) {
+                    $headerMap[$expected] = $index;
+                }
+            }
+
+            // Process rows
+            while (($row = fgetcsv($handle)) !== false) {
+                $rowNumber++;
+                
+                // Skip empty rows
+                if (empty(array_filter($row))) {
+                    continue;
+                }
+
+                try {
+                    $data = [];
+                    foreach ($headerMap as $field => $index) {
+                        $data[$field] = isset($row[$index]) ? trim($row[$index]) : '';
+                    }
+
+                    // Validate required fields
+                    if (empty($data['contact_name']) && empty($data['contact_phone'])) {
+                        $errors[] = "Row {$rowNumber}: Either contact_name or contact_phone is required";
+                        continue;
+                    }
+
+                    // Validate priority
+                    $validPriorities = ['low', 'medium', 'high', 'urgent'];
+                    if (!empty($data['priority']) && !in_array(strtolower($data['priority']), $validPriorities)) {
+                        $errors[] = "Row {$rowNumber}: Invalid priority. Must be one of: " . implode(', ', $validPriorities);
+                        continue;
+                    }
+
+                    // Validate status
+                    $validStatuses = ['scheduled', 'in_progress', 'completed', 'no_answer', 'busy', 'cancelled'];
+                    if (!empty($data['status']) && !in_array(strtolower($data['status']), $validStatuses)) {
+                        $errors[] = "Row {$rowNumber}: Invalid status. Must be one of: " . implode(', ', $validStatuses);
+                        continue;
+                    }
+
+                    // Validate customer_id if provided
+                    if (!empty($data['customer_id'])) {
+                        $customer = Customer::where('id', $data['customer_id'])
+                            ->where('company_id', $companyId)
+                            ->first();
+                        if (!$customer) {
+                            $errors[] = "Row {$rowNumber}: Invalid customer_id: " . $data['customer_id'];
+                            continue;
+                        }
+                    }
+
+                    // Validate opportunity_id if provided
+                    if (!empty($data['opportunity_id'])) {
+                        $opportunity = Opportunity::where('id', $data['opportunity_id'])
+                            ->where('company_id', $companyId)
+                            ->first();
+                        if (!$opportunity) {
+                            $errors[] = "Row {$rowNumber}: Invalid opportunity_id: " . $data['opportunity_id'];
+                            continue;
+                        }
+                    }
+
+                    // Parse dates
+                    $scheduledAt = null;
+                    if (!empty($data['scheduled_at'])) {
+                        try {
+                            $scheduledAt = \Carbon\Carbon::parse($data['scheduled_at']);
+                        } catch (\Exception $e) {
+                            $errors[] = "Row {$rowNumber}: Invalid scheduled_at format: " . $data['scheduled_at'];
+                            continue;
+                        }
+                    }
+
+                    $callbackAt = null;
+                    if (!empty($data['callback_at'])) {
+                        try {
+                            $callbackAt = \Carbon\Carbon::parse($data['callback_at']);
+                        } catch (\Exception $e) {
+                            $errors[] = "Row {$rowNumber}: Invalid callback_at format: " . $data['callback_at'];
+                            continue;
+                        }
+                    }
+
+                    // Create call
+                    $callData = [
+                        'company_id' => $companyId,
+                        'user_id' => $user->id,
+                        'contact_name' => $data['contact_name'] ?: null,
+                        'contact_phone' => $data['contact_phone'] ?: null,
+                        'source' => $data['source'] ?: null,
+                        'priority' => strtolower($data['priority']) ?: 'medium',
+                        'status' => strtolower($data['status']) ?: 'scheduled',
+                        'scheduled_at' => $scheduledAt,
+                        'notes' => $data['notes'] ?: null,
+                        'next_action' => $data['next_action'] ?: null,
+                        'callback_at' => $callbackAt,
+                    ];
+
+                    Call::create($callData);
+                    $successCount++;
+
+                } catch (\Exception $e) {
+                    $errors[] = "Row {$rowNumber}: " . $e->getMessage();
+                    Log::error('CSV import error', [
+                        'row' => $rowNumber,
+                        'error' => $e->getMessage(),
+                        'data' => $data ?? [],
+                    ]);
+                }
+            }
+
+            fclose($handle);
+
+            return response()->json([
+                'message' => 'Import completed',
+                'success_count' => $successCount,
+                'error_count' => count($errors),
+                'errors' => $errors,
+            ], 200);
+
+        } catch (\Exception $e) {
+            Log::error('CSV import failed', [
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
+            return response()->json([
+                'message' => 'Import failed: ' . $e->getMessage(),
+            ], 500);
+        }
     }
 }

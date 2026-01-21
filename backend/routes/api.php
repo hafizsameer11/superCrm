@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\CallController;
 use App\Http\Controllers\Api\CampaignController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\FollowUpController;
+use App\Http\Controllers\Api\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -36,6 +37,9 @@ Route::middleware('auth:sanctum')->group(function () {
     // Authentication
     Route::post('/auth/logout', [AuthController::class, 'logout']);
     Route::get('/auth/me', [AuthController::class, 'me']);
+
+    // Users
+    Route::apiResource('users', UserController::class);
 
     // Companies
     Route::apiResource('companies', CompanyController::class);
@@ -120,6 +124,8 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/calls/stats', [CallController::class, 'stats']);
     Route::get('/calls/operators', [CallController::class, 'operators']);
     Route::get('/calls/today', [CallController::class, 'today']);
+    Route::get('/calls/export-template', [CallController::class, 'exportTemplate']);
+    Route::post('/calls/import', [CallController::class, 'importCalls']);
     Route::apiResource('calls', CallController::class);
     Route::post('/calls/{call}/complete', [CallController::class, 'complete']);
     Route::post('/calls/{call}/initiate', [CallController::class, 'initiateCall']);
@@ -129,9 +135,11 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/support-tickets/{supportTicket}/assign', [SupportTicketController::class, 'assign']);
     Route::post('/support-tickets/{supportTicket}/close', [SupportTicketController::class, 'close']);
 
-    // Campaigns
-    Route::apiResource('campaigns', CampaignController::class);
+    // Campaigns - Specific routes must come BEFORE apiResource to avoid route conflicts
     Route::get('/campaigns/stats', [CampaignController::class, 'stats']);
+    Route::post('/campaigns/{campaign}/payment/checkout', [CampaignController::class, 'createPaymentCheckout']);
+    Route::post('/campaigns/payment/success', [CampaignController::class, 'handlePaymentSuccess']);
+    Route::apiResource('campaigns', CampaignController::class);
 
     // Subscriptions
     Route::get('/subscription', [SubscriptionController::class, 'index']);

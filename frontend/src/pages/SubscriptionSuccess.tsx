@@ -25,69 +25,57 @@ export default function SubscriptionSuccess() {
 
   const verifySession = async () => {
     try {
-      // Get company_id and plan_id from URL params (passed from checkout)
-      const companyId = searchParams.get('company_id');
-      const planId = searchParams.get('plan_id');
-      const paymentIntentId = searchParams.get('payment_intent');
-      
-      if (!companyId || !planId) {
-        setError('Missing company or plan information');
+      if (!sessionId) {
+        setError('Missing session ID');
         setLoading(false);
         return;
       }
       
-      // Call backend API to activate subscription - no verification, just activate
-      console.log('📞 Activating subscription (payment successful)...');
-      const response = await api.post('/subscription/activate', {
-        session_id: sessionId,
-        company_id: parseInt(companyId),
-        plan_id: parseInt(planId),
-        payment_intent_id: paymentIntentId || null,
+      // Call backend API to verify and activate subscription
+      // This endpoint will save the subscription to database
+      console.log('📞 Verifying and activating subscription (payment successful)...');
+      const response = await api.get('/subscription/success', {
+        params: {
+          session_id: sessionId,
+        },
       });
       
       console.log('✅ Subscription activated:', response.data);
       
-      // Refresh auth data to get updated subscription status
-      await checkAuth();
-      
-      // Get fresh user data from store
-      const currentUser = useAuthStore.getState().user;
-      
-      console.log('User after activation:', {
-        subscription_status: currentUser?.company?.subscription_status,
-        company_status: currentUser?.company?.status,
-      });
-      
-      // If subscription is active, redirect to dashboard
-      if (currentUser?.company?.subscription_status === 'active') {
-        console.log('✅✅✅ Subscription confirmed ACTIVE! Redirecting...');
-        setLoading(false);
-        setTimeout(() => {
-          navigate('/dashboard', { replace: true });
-        }, 500);
+      if (response.data.message && response.data.subscription) {
+        // Subscription was successfully saved to database
+        // Refresh auth data to get updated subscription status
+        await checkAuth();
+        
+        // Immediately redirect back to subscription page with success message
+        const successMessage = response.data.message || 'Subscription activated successfully';
+        navigate('/subscribe?success=true&message=' + encodeURIComponent(successMessage), { replace: true });
+        return; // Exit early to prevent further execution
       } else {
-        // Retry auth refresh a few times (in case of cache delay)
-        let attempts = 0;
-        const maxAttempts = 3;
+        // Fallback: try activate endpoint if success endpoint didn't work
+        const companyId = searchParams.get('company_id');
+        const planId = searchParams.get('plan_id');
+        const paymentIntentId = searchParams.get('payment_intent');
         
-        while (attempts < maxAttempts) {
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          await checkAuth();
-          const updatedUser = useAuthStore.getState().user;
+        if (companyId && planId) {
+          console.log('📞 Trying activate endpoint as fallback...');
+          const activateResponse = await api.post('/subscription/activate', {
+            session_id: sessionId,
+            company_id: parseInt(companyId),
+            plan_id: parseInt(planId),
+            payment_intent_id: paymentIntentId || null,
+          });
           
-          if (updatedUser?.company?.subscription_status === 'active') {
-            console.log('✅ Subscription active after retry!');
-            setLoading(false);
-            navigate('/dashboard', { replace: true });
-            return;
-          }
-          attempts++;
+          console.log('✅ Subscription activated via fallback:', activateResponse.data);
+          await checkAuth();
+          // Immediately redirect back to subscription page with success message
+          const successMessage = activateResponse.data.message || 'Subscription activated successfully';
+          navigate('/subscribe?success=true&message=' + encodeURIComponent(successMessage), { replace: true });
+          return; // Exit early
+        } else {
+          setError('Subscription activated but missing redirect information');
+          setLoading(false);
         }
-        
-        // Backend activated it, but frontend hasn't picked it up yet - redirect anyway
-        console.warn('⚠️ Redirecting anyway - backend activated subscription');
-        setLoading(false);
-        navigate('/dashboard', { replace: true });
       }
       
     } catch (err: any) {
@@ -103,7 +91,8 @@ export default function SubscriptionSuccess() {
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-aqua-2 to-aqua-1">
         <div className="bg-white p-8 rounded-2xl shadow-lg border border-line w-full max-w-md text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-aqua-5 mx-auto mb-4"></div>
-          <p className="text-muted">Verifying your subscription...</p>
+          <p className="text-muted mb-2">Processing your payment...</p>
+          <p className="text-sm text-muted">Saving subscription to database...</p>
         </div>
       </div>
     );
@@ -138,6 +127,7 @@ export default function SubscriptionSuccess() {
     );
   }
 
+  // This should not be reached if redirect worked, but show a fallback just in case
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-aqua-2 to-aqua-1">
       <div className="bg-white p-8 rounded-2xl shadow-lg border border-line w-full max-w-md text-center">
@@ -156,29 +146,20 @@ export default function SubscriptionSuccess() {
             />
           </svg>
         </div>
-        <h1 className="text-2xl font-bold text-ink mb-2">Subscription Activated!</h1>
-        <p className="text-muted mb-6">
-          Your subscription has been successfully activated. Your account is now active and you have full access to the platform.
+        <h1 className="text-2xl font-bold text-ink mb-2">Payment Successful!</h1>
+        <p className="text-muted mb-4">
+          Your payment has been processed successfully and your subscription has been saved to the database.
         </p>
         <p className="text-sm text-muted mb-6">
-          {loading ? 'Verifying subscription status...' : 'Redirecting to dashboard...'}
+          Redirecting you back to the subscription page...
         </p>
         <Button 
-          onClick={async () => {
-            // Force refresh auth before navigating
-            try {
-              console.log('🔄 Manual refresh before navigation...');
-              await checkAuth();
-              const currentUser = useAuthStore.getState().user;
-              console.log('User after manual refresh:', currentUser?.company?.subscription_status);
-            } catch (e) {
-              console.error('Manual auth refresh failed:', e);
-            }
-            navigate('/dashboard', { replace: true });
+          onClick={() => {
+            navigate('/subscribe?success=true&message=' + encodeURIComponent('Subscription activated successfully'), { replace: true });
           }} 
           variant="primary"
         >
-          Go to Dashboard Now
+          Continue to Subscription Page
         </Button>
       </div>
     </div>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import api from '../services/api';
 import Topbar from '../components/layout/Topbar';
+import { useAuthStore } from '../stores/authStore';
 
 interface Customer {
   id: number;
@@ -52,9 +53,18 @@ interface PaginatedResponse {
   total: number;
 }
 
+interface Company {
+  id: number;
+  name: string;
+  status: string;
+}
+
 export default function Support() {
+  const user = useAuthStore((state) => state.user);
+  const isSuperAdmin = user?.role === 'super_admin';
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [loading, setLoading] = useState(true);
+  const [companies, setCompanies] = useState<Company[]>([]);
   const [filters, setFilters] = useState({
     status: 'all',
     priority: 'all',
@@ -75,6 +85,7 @@ export default function Support() {
     priority: 'medium' as 'low' | 'medium' | 'high' | 'urgent',
     type: 'other' as 'technical' | 'billing' | 'feature_request' | 'bug' | 'other',
     status: 'open' as 'open' | 'in_progress' | 'waiting_customer' | 'resolved' | 'closed',
+    company_id: '',
     customer_id: '',
     customer_name: '',
     customer_email: '',
@@ -88,6 +99,21 @@ export default function Support() {
   useEffect(() => {
     fetchTickets();
   }, [filters, pagination.current_page]);
+
+  useEffect(() => {
+    if (isSuperAdmin && showCreateModal) {
+      fetchCompanies();
+    }
+  }, [isSuperAdmin, showCreateModal]);
+
+  const fetchCompanies = async () => {
+    try {
+      const response = await api.get('/companies', { params: { per_page: 1000 } });
+      setCompanies(response.data.data || response.data || []);
+    } catch (error) {
+      console.error('Failed to fetch companies:', error);
+    }
+  };
 
   const fetchTickets = async () => {
     try {
@@ -128,6 +154,12 @@ export default function Support() {
 
   const handleCreateTicket = async () => {
     try {
+      // For super_admin, company_id is required
+      if (isSuperAdmin && !formData.company_id) {
+        alert('Please select a company to create the ticket.');
+        return;
+      }
+
       const payload: any = {
         subject: formData.subject,
         description: formData.description,
@@ -135,6 +167,11 @@ export default function Support() {
         type: formData.type,
         status: formData.status,
       };
+
+      // Add company_id for super_admin
+      if (isSuperAdmin && formData.company_id) {
+        payload.company_id = parseInt(formData.company_id);
+      }
 
       if (formData.customer_id) {
         payload.customer_id = parseInt(formData.customer_id);
@@ -152,9 +189,9 @@ export default function Support() {
       setShowCreateModal(false);
       resetForm();
       fetchTickets();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to create ticket:', error);
-      alert('Failed to create ticket. Please try again.');
+      alert(error.response?.data?.message || 'Failed to create ticket. Please try again.');
     }
   };
 
@@ -227,6 +264,7 @@ export default function Support() {
       priority: 'medium',
       type: 'other',
       status: 'open',
+      company_id: '',
       customer_id: '',
       customer_name: '',
       customer_email: '',
@@ -569,6 +607,26 @@ export default function Support() {
             </h2>
 
             <div className="space-y-4">
+              {/* Company Selector for Super Admin - Only when creating */}
+              {isSuperAdmin && !editingTicket && (
+                <div>
+                  <label className="block text-sm font-medium text-ink mb-1">Company *</label>
+                  <select
+                    value={formData.company_id}
+                    onChange={(e) => setFormData({ ...formData, company_id: e.target.value })}
+                    className="w-full px-4 py-2 border border-line rounded-xl focus:border-aqua-5 focus:ring-2 focus:ring-aqua-5/20 outline-none"
+                    required
+                  >
+                    <option value="">Select a company</option>
+                    {companies.map((company) => (
+                      <option key={company.id} value={company.id}>
+                        {company.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm font-medium text-ink mb-1">Subject *</label>
                 <input
