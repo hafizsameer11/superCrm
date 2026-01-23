@@ -14,6 +14,7 @@ import Users from './pages/Users';
 import Settings from './pages/Settings';
 import ProjectIframePage from './pages/ProjectIframePage';
 import DoctorProject from './pages/DoctorProject';
+import TGCalabriaProject from './pages/TGCalabriaProject';
 import Subscribe from './pages/Subscribe';
 import SubscriptionSuccess from './pages/SubscriptionSuccess';
 import SubscriptionCancel from './pages/SubscriptionCancel';
@@ -101,6 +102,10 @@ export const router = createBrowserRouter([
       {
         path: 'projects/:projectId/doctor',
         element: <DoctorProject />,
+      },
+      {
+        path: 'projects/:projectId/tg-calabria',
+        element: <TGCalabriaProject />,
       },
       {
         path: 'companies',

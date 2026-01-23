@@ -64,6 +64,12 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::post('/projects/{project}/sso/redirect', [ProjectController::class, 'generateSSORedirect']);
     Route::get('/projects/{project}/iframe-callback', [ProjectController::class, 'iframeCallback']);
 
+    // TG Calabria Project
+    Route::post('/projects/{projectId}/tg-calabria/login', [\App\Http\Controllers\Api\TGCalabriaController::class, 'login']);
+    Route::get('/projects/{projectId}/tg-calabria/categories', [\App\Http\Controllers\Api\TGCalabriaController::class, 'getCategories']);
+    Route::get('/projects/{projectId}/tg-calabria/news/stats', [\App\Http\Controllers\Api\TGCalabriaController::class, 'getNewsStats']);
+    Route::post('/projects/{projectId}/tg-calabria/news', [\App\Http\Controllers\Api\TGCalabriaController::class, 'createArticle']);
+
     // Customers
     Route::apiResource('customers', CustomerController::class);
     Route::post('/customers/merge', [CustomerController::class, 'merge']);
@@ -141,6 +147,7 @@ Route::middleware('auth:sanctum')->group(function () {
     Route::get('/campaigns/stats', [CampaignController::class, 'stats']);
     Route::post('/campaigns/{campaign}/payment/checkout', [CampaignController::class, 'createPaymentCheckout']);
     Route::post('/campaigns/payment/success', [CampaignController::class, 'handlePaymentSuccess']);
+    Route::post('/campaigns/{campaign}/activate', [CampaignController::class, 'activate']);
     Route::apiResource('campaigns', CampaignController::class);
 
     // Subscriptions

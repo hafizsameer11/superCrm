@@ -9,7 +9,9 @@ use App\Services\StripeService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Support\Facades\Http;
 
 class CampaignController extends Controller
 {
@@ -31,6 +33,8 @@ class CampaignController extends Controller
         if ($user->isSuperAdmin()) {
             $query = Campaign::withoutGlobalScope('company')->with(['creator', 'project', 'company']);
         } else {
+            // For non-super-admin, the global scope already filters by company_id
+            // So they will see all campaigns from their company
             $query = Campaign::with(['creator', 'project']);
         }
 
@@ -50,15 +54,6 @@ class CampaignController extends Controller
                 ], 403);
             }
             $query->where('project_id', $projectId);
-        } elseif (!$user->isSuperAdmin()) {
-            // For non-super-admin, filter campaigns to only show projects they have access to
-            $accessibleProjectIds = $user->getAccessibleProjectIds();
-            if (empty($accessibleProjectIds)) {
-                // User has no project access, return empty result
-                $query->whereRaw('1 = 0'); // Force no results
-            } else {
-                $query->whereIn('project_id', $accessibleProjectIds);
-            }
         }
         if ($request->has('search')) {
             $search = $request->search;
@@ -79,21 +74,52 @@ class CampaignController extends Controller
 
     public function store(Request $request)
     {
+        // Process FormData values before validation
+        // Convert string booleans to actual booleans
+        if ($request->has('track_clicks')) {
+            $request->merge(['track_clicks' => filter_var($request->track_clicks, FILTER_VALIDATE_BOOLEAN)]);
+        }
+        if ($request->has('track_opens')) {
+            $request->merge(['track_opens' => filter_var($request->track_opens, FILTER_VALIDATE_BOOLEAN)]);
+        }
+        
+        // Parse JSON strings to arrays for target_audience and target_criteria
+        if ($request->has('target_audience')) {
+            if (is_string($request->target_audience)) {
+                $decoded = json_decode($request->target_audience, true);
+                $request->merge(['target_audience' => is_array($decoded) ? $decoded : []]);
+            } elseif (!is_array($request->target_audience)) {
+                $request->merge(['target_audience' => []]);
+            }
+        } else {
+            $request->merge(['target_audience' => []]);
+        }
+        
+        if ($request->has('target_criteria')) {
+            if (is_string($request->target_criteria)) {
+                $decoded = json_decode($request->target_criteria, true);
+                $request->merge(['target_criteria' => is_array($decoded) ? $decoded : []]);
+            } elseif (!is_array($request->target_criteria)) {
+                $request->merge(['target_criteria' => []]);
+            }
+        } else {
+            $request->merge(['target_criteria' => []]);
+        }
+
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
-            'type' => ['required', Rule::in(['email', 'sms', 'social_media', 'advertising', 'content', 'event', 'other'])],
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240', // 10MB max
+            'target_link' => 'required|string|url|max:500',
+            'type' => ['required', Rule::in(['BANNER_TOP', 'BANNER_SIDE', 'INLINE', 'FOOTER', 'SLIDER', 'TICKER', 'POPUP', 'STICKY'])],
             'status' => ['sometimes', Rule::in(['draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled'])],
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after:start_date',
-            'scheduled_at' => 'nullable|date',
             'budget' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'target_audience' => 'nullable|array',
             'target_criteria' => 'nullable|array',
-            'subject' => 'nullable|string|max:255',
-            'content' => 'nullable|string',
             'content_data' => 'nullable|array',
             'settings' => 'nullable|array',
             'track_clicks' => 'sometimes|boolean',
@@ -107,6 +133,34 @@ class CampaignController extends Controller
             return response()->json([
                 'message' => 'You do not have access to this project',
             ], 403);
+        }
+        
+        // Handle image upload
+        if ($request->hasFile('image')) {
+            $image = $request->file('image');
+            $path = $image->store('campaigns/' . $user->company_id, 'public');
+            $validated['image_path'] = $path;
+        }
+        
+        // Validate target_link URL format (required field, so it should always be present)
+        if (isset($validated['target_link']) && !empty($validated['target_link'])) {
+            if (!filter_var($validated['target_link'], FILTER_VALIDATE_URL)) {
+                return response()->json([
+                    'message' => 'The target link must be a valid URL.',
+                ], 422);
+            }
+        }
+        
+        // Handle target_link from settings JSON if sent that way (for backward compatibility)
+        if ($request->has('settings') && !isset($validated['target_link'])) {
+            if (is_string($request->settings)) {
+                $decoded = json_decode($request->settings, true);
+                if (is_array($decoded) && isset($decoded['target_link']) && !empty(trim($decoded['target_link']))) {
+                    $validated['target_link'] = $decoded['target_link'];
+                }
+            } elseif (is_array($request->settings) && isset($request->settings['target_link']) && !empty(trim($request->settings['target_link']))) {
+                $validated['target_link'] = $request->settings['target_link'];
+            }
         }
         
         $validated['company_id'] = $user->company_id;
@@ -133,21 +187,56 @@ class CampaignController extends Controller
     {
         $user = $request->user();
         
+        // Process FormData values before validation
+        // Convert string booleans to actual booleans
+        if ($request->has('track_clicks')) {
+            $request->merge(['track_clicks' => filter_var($request->track_clicks, FILTER_VALIDATE_BOOLEAN)]);
+        }
+        if ($request->has('track_opens')) {
+            $request->merge(['track_opens' => filter_var($request->track_opens, FILTER_VALIDATE_BOOLEAN)]);
+        }
+        
+        // Handle target_link - normalize empty strings to null before validation
+        if ($request->has('target_link')) {
+            $targetLink = trim($request->target_link);
+            if (empty($targetLink)) {
+                $request->merge(['target_link' => null]);
+            }
+        }
+        
+        // Parse JSON strings to arrays for target_audience and target_criteria
+        if ($request->has('target_audience')) {
+            if (is_string($request->target_audience)) {
+                $decoded = json_decode($request->target_audience, true);
+                $request->merge(['target_audience' => is_array($decoded) ? $decoded : []]);
+            } elseif (!is_array($request->target_audience)) {
+                $request->merge(['target_audience' => []]);
+            }
+        }
+        
+        if ($request->has('target_criteria')) {
+            if (is_string($request->target_criteria)) {
+                $decoded = json_decode($request->target_criteria, true);
+                $request->merge(['target_criteria' => is_array($decoded) ? $decoded : []]);
+            } elseif (!is_array($request->target_criteria)) {
+                $request->merge(['target_criteria' => []]);
+            }
+        }
+        
         $validated = $request->validate([
             'project_id' => 'nullable|exists:projects,id',
             'name' => 'sometimes|string|max:255',
             'description' => 'nullable|string',
-            'type' => ['sometimes', Rule::in(['email', 'sms', 'social_media', 'advertising', 'content', 'event', 'other'])],
+            'image' => 'nullable|image|mimes:jpeg,png,jpg,gif,webp|max:10240', // 10MB max
+            'target_link' => 'nullable|string|url|max:500', // Optional for updates, but if provided must be valid URL
+            'type' => ['sometimes', Rule::in(['BANNER_TOP', 'BANNER_SIDE', 'INLINE', 'FOOTER', 'SLIDER', 'TICKER', 'POPUP', 'STICKY'])],
             'status' => ['sometimes', Rule::in(['draft', 'scheduled', 'active', 'paused', 'completed', 'cancelled'])],
             'start_date' => 'nullable|date',
             'end_date' => 'nullable|date|after:start_date',
-            'scheduled_at' => 'nullable|date',
             'budget' => 'nullable|numeric|min:0',
             'currency' => 'nullable|string|size:3',
             'target_audience' => 'nullable|array',
             'target_criteria' => 'nullable|array',
-            'subject' => 'nullable|string|max:255',
-            'content' => 'nullable|string',
             'content_data' => 'nullable|array',
             'settings' => 'nullable|array',
             'track_clicks' => 'sometimes|boolean',
@@ -159,6 +248,42 @@ class CampaignController extends Controller
             return response()->json([
                 'message' => 'You do not have access to this project',
             ], 403);
+        }
+
+        // Handle image upload
+        if ($request->hasFile('image')) {
+            // Delete old image if exists
+            if ($campaign->image_path && Storage::disk('public')->exists($campaign->image_path)) {
+                Storage::disk('public')->delete($campaign->image_path);
+            }
+            
+            $image = $request->file('image');
+            $path = $image->store('campaigns/' . $user->company_id, 'public');
+            $validated['image_path'] = $path;
+        }
+
+        // Validate target_link URL format if provided
+        if (isset($validated['target_link']) && !empty($validated['target_link'])) {
+            if (!filter_var($validated['target_link'], FILTER_VALIDATE_URL)) {
+                return response()->json([
+                    'message' => 'The target link must be a valid URL.',
+                ], 422);
+            }
+        } else {
+            // If target_link is empty or not provided, set it to null
+            $validated['target_link'] = null;
+        }
+        
+        // Handle target_link from settings JSON if sent that way (for backward compatibility)
+        if ($request->has('settings') && !isset($validated['target_link'])) {
+            if (is_string($request->settings)) {
+                $decoded = json_decode($request->settings, true);
+                if (is_array($decoded) && isset($decoded['target_link']) && !empty(trim($decoded['target_link']))) {
+                    $validated['target_link'] = $decoded['target_link'];
+                }
+            } elseif (is_array($request->settings) && isset($request->settings['target_link']) && !empty(trim($request->settings['target_link']))) {
+                $validated['target_link'] = $request->settings['target_link'];
+            }
         }
 
         $oldValues = $campaign->getAttributes();
@@ -331,6 +456,186 @@ class CampaignController extends Controller
         } catch (\Exception $e) {
             return response()->json([
                 'message' => 'Failed to process payment: ' . $e->getMessage(),
+            ], 500);
+        }
+    }
+
+    /**
+     * Activate campaign by creating ad in external system.
+     */
+    public function activate(Request $request, Campaign $campaign)
+    {
+        $user = $request->user();
+
+        // Only super admin can activate campaigns
+        if (!$user->isSuperAdmin()) {
+            return response()->json([
+                'message' => 'Only super admin can activate campaigns',
+            ], 403);
+        }
+
+        // Check if payment status is paid
+        if ($campaign->payment_status !== 'paid') {
+            return response()->json([
+                'message' => 'Campaign must be paid before activation',
+            ], 400);
+        }
+
+        // Validate required fields
+        if (!$campaign->name || !$campaign->type || !$campaign->image_path || !$campaign->budget || !$campaign->start_date || !$campaign->end_date) {
+            return response()->json([
+                'message' => 'Campaign is missing required fields for activation',
+            ], 400);
+        }
+
+        try {
+            // Step 1: Login to external API
+            $loginResponse = Http::post('https://api.tgcalabriareport.com/api/v1/auth/login', [
+                'email' => 'admin@gmail.com',
+                'password' => '11221122',
+            ]);
+
+            if (!$loginResponse->successful()) {
+                Log::error('Failed to login to external API', [
+                    'campaign_id' => $campaign->id,
+                    'status_code' => $loginResponse->status(),
+                    'response' => $loginResponse->body(),
+                ]);
+                return response()->json([
+                    'message' => 'Failed to authenticate with external API: ' . ($loginResponse->json()['message'] ?? 'HTTP ' . $loginResponse->status()),
+                ], 500);
+            }
+
+            $loginData = $loginResponse->json();
+            
+            // Extract token from response - it can be in different locations
+            $token = $loginData['data']['token'] ?? 
+                     $loginData['token'] ?? 
+                     $loginData['access_token'] ?? 
+                     ($loginData['data']['access_token'] ?? null);
+
+            if (!$token) {
+                Log::error('No token received from login', [
+                    'campaign_id' => $campaign->id,
+                    'response' => $loginData,
+                    'status_code' => $loginResponse->status(),
+                ]);
+                return response()->json([
+                    'message' => 'Failed to get authentication token. Please check the API response structure.',
+                ], 500);
+            }
+
+            // Step 2: Get image URL
+            $imageUrl = Storage::disk('public')->url($campaign->image_path);
+            // If the URL is relative, make it absolute
+            if (!filter_var($imageUrl, FILTER_VALIDATE_URL)) {
+                $imageUrl = url($imageUrl);
+            }
+
+            // Step 3: Create ad in external API
+            // Parse dates and ensure they're in UTC timezone with proper ISO 8601 format
+            // Expected format: 2024-06-01T00:00:00.000Z (ISO 8601 with milliseconds and Z suffix)
+            $startDate = $campaign->start_date instanceof \Carbon\Carbon 
+                ? $campaign->start_date->utc() 
+                : \Carbon\Carbon::parse($campaign->start_date)->utc();
+            $endDate = $campaign->end_date instanceof \Carbon\Carbon 
+                ? $campaign->end_date->utc() 
+                : \Carbon\Carbon::parse($campaign->end_date)->utc();
+            
+            // Format dates as ISO 8601 with milliseconds and Z suffix: 2024-06-01T00:00:00.000Z
+            // The 'v' format gives milliseconds (000-999), and we append 'Z' for UTC/Zulu time
+            $startDateFormatted = $startDate->format('Y-m-d\TH:i:s.v') . 'Z';
+            $endDateFormatted = $endDate->format('Y-m-d\TH:i:s.v') . 'Z';
+            
+            // Get target link from direct field, settings, or content_data (for backward compatibility)
+            $targetLink = $campaign->target_link;
+            
+            if (!$targetLink) {
+                // Fallback to settings or content_data for backward compatibility
+                if ($campaign->settings && is_array($campaign->settings) && isset($campaign->settings['target_link'])) {
+                    $targetLink = $campaign->settings['target_link'];
+                } elseif ($campaign->content_data && is_array($campaign->content_data) && isset($campaign->content_data['target_link'])) {
+                    $targetLink = $campaign->content_data['target_link'];
+                }
+            }
+            
+            if (!$targetLink) {
+                return response()->json([
+                    'message' => 'Campaign must have a target link. Please add a target link in the campaign form.',
+                ], 400);
+            }
+            
+            // Determine position based on type
+            $position = 'BODY';
+            if ($campaign->type === 'BANNER_TOP') {
+                $position = 'HEADER';
+            } elseif ($campaign->type === 'FOOTER') {
+                $position = 'FOOTER';
+            } elseif (in_array($campaign->type, ['BANNER_SIDE', 'STICKY'])) {
+                $position = 'SIDEBAR';
+            }
+            
+            $adData = [
+                'title' => $campaign->name,
+                'type' => $campaign->type,
+                'imageUrl' => $imageUrl,
+                'targetLink' => $targetLink,
+                'position' => $position,
+                'startDate' => $startDateFormatted,
+                'endDate' => $endDateFormatted,
+                'price' => (float) $campaign->budget,
+            ];
+
+            $adResponse = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $token,
+                'Content-Type' => 'application/json',
+                'Accept' => 'application/json',
+            ])->post('https://api.tgcalabriareport.com/api/v1/crm/ads', $adData);
+
+            if (!$adResponse->successful()) {
+                $responseData = $adResponse->json();
+                $errorMessage = $responseData['message'] ?? 'Unknown error';
+                $validationErrors = $responseData['errors'] ?? $responseData['error'] ?? null;
+                
+                Log::error('Failed to create ad in external API', [
+                    'campaign_id' => $campaign->id,
+                    'status_code' => $adResponse->status(),
+                    'response' => $adResponse->body(),
+                    'ad_data' => $adData,
+                    'validation_errors' => $validationErrors,
+                ]);
+                
+                $errorDetails = $errorMessage;
+                if ($validationErrors) {
+                    if (is_array($validationErrors)) {
+                        $errorDetails .= ': ' . json_encode($validationErrors);
+                    } else {
+                        $errorDetails .= ': ' . $validationErrors;
+                    }
+                }
+                
+                return response()->json([
+                    'message' => 'Failed to create ad in external system: ' . $errorDetails,
+                    'validation_errors' => $validationErrors,
+                ], 500);
+            }
+
+            // Update campaign status to active
+            $campaign->update(['status' => 'active']);
+
+            return response()->json([
+                'message' => 'Campaign activated successfully',
+                'campaign' => $campaign->load(['creator', 'project']),
+                'ad_response' => $adResponse->json(),
+            ]);
+        } catch (\Exception $e) {
+            Log::error('Failed to activate campaign', [
+                'campaign_id' => $campaign->id,
+                'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+            return response()->json([
+                'message' => 'Failed to activate campaign: ' . $e->getMessage(),
             ], 500);
         }
     }

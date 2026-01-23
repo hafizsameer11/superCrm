@@ -301,6 +301,44 @@ class CompanyController extends Controller
                     ];
                 }
             }
+            
+            // Register users to TG Calabria project if status is active and project is tg-calabria
+            if ($newStatus === 'active' && $project && $project->slug === 'tg-calabria') {
+                \Illuminate\Support\Facades\Log::info('TG Calabria project detected (update), proceeding with registration', [
+                    'access_id' => $existingAccess->id,
+                    'project_id' => $project->id,
+                    'project_slug' => $project->slug,
+                    'access_status' => $newStatus,
+                    'old_status' => $oldStatus,
+                ]);
+                try {
+                    \Illuminate\Support\Facades\Log::info('Attempting to register users for TG Calabria project (update)', [
+                        'access_id' => $existingAccess->id,
+                        'project_id' => $project->id,
+                        'project_slug' => $project->slug,
+                    ]);
+                    
+                    $registrationService = app(\App\Services\TGCalabriaProjectRegistrationService::class);
+                    $registrationResult = $registrationService->registerUsersForTGCalabriaProject($existingAccess);
+                    
+                    \Illuminate\Support\Facades\Log::info('TG Calabria registration result (update)', [
+                        'access_id' => $existingAccess->id,
+                        'result' => $registrationResult,
+                    ]);
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to register users to TG Calabria project', [
+                        'access_id' => $existingAccess->id,
+                        'project_id' => $project->id,
+                        'error' => $e->getMessage(),
+                        'trace' => $e->getTraceAsString(),
+                    ]);
+                    
+                    $registrationResult = [
+                        'success' => false,
+                        'message' => 'Registration failed: ' . $e->getMessage(),
+                    ];
+                }
+            }
 
             $responseData = $existingAccess->load(['project', 'projectUsers.user'])->toArray();
             if ($registrationResult) {
@@ -368,6 +406,43 @@ class CompanyController extends Controller
                 ]);
             } catch (\Exception $e) {
                 \Illuminate\Support\Facades\Log::error('Failed to register users to doctor project', [
+                    'access_id' => $access->id,
+                    'project_id' => $project->id,
+                    'error' => $e->getMessage(),
+                    'trace' => $e->getTraceAsString(),
+                ]);
+                
+                $registrationResult = [
+                    'success' => false,
+                    'message' => 'Registration failed: ' . $e->getMessage(),
+                ];
+            }
+        }
+        
+        // Register users to TG Calabria project if this is the TG Calabria project and access is active
+        if ($access->status === 'active' && $project && $project->slug === 'tg-calabria') {
+            \Illuminate\Support\Facades\Log::info('TG Calabria project detected, proceeding with registration', [
+                'access_id' => $access->id,
+                'project_id' => $project->id,
+                'project_slug' => $project->slug,
+                'access_status' => $access->status,
+            ]);
+            try {
+                \Illuminate\Support\Facades\Log::info('Attempting to register users for TG Calabria project', [
+                    'access_id' => $access->id,
+                    'project_id' => $project->id,
+                    'project_slug' => $project->slug,
+                ]);
+                
+                $registrationService = app(\App\Services\TGCalabriaProjectRegistrationService::class);
+                $registrationResult = $registrationService->registerUsersForTGCalabriaProject($access);
+                
+                \Illuminate\Support\Facades\Log::info('TG Calabria registration result', [
+                    'access_id' => $access->id,
+                    'result' => $registrationResult,
+                ]);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to register users to TG Calabria project', [
                     'access_id' => $access->id,
                     'project_id' => $project->id,
                     'error' => $e->getMessage(),

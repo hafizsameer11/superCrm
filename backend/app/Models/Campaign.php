@@ -28,6 +28,8 @@ class Campaign extends Model
         'project_id',
         'name',
         'description',
+        'image_path',
+        'target_link',
         'type',
         'status',
         'start_date',

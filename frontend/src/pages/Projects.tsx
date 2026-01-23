@@ -82,6 +82,12 @@ export default function Projects() {
         return;
       }
       
+      // Special handling for TG Calabria project
+      if (project.slug === 'tg-calabria') {
+        navigate(`/projects/${projectId}/tg-calabria`);
+        return;
+      }
+      
       if (project.integration_type === 'iframe') {
         navigate(`/projects/${projectId}/iframe`);
       } else {

@@ -265,13 +265,16 @@ export default function Companies() {
         const regResult = response.data.registration_result;
         console.log('Registration result:', regResult);
         
+        // Get project name from response
+        const projectName = response.data.project?.name || 'external project';
+        
         if (regResult.results) {
           const { success, failed, total } = regResult.results;
           const successCount = Array.isArray(success) ? success.length : 0;
           const failedCount = Array.isArray(failed) ? failed.length : 0;
           
           if (successCount > 0) {
-            alert(`Successfully registered ${successCount} out of ${total} users to doctor project.`);
+            alert(`Successfully registered ${successCount} out of ${total} users to ${projectName}.`);
           }
           if (failedCount > 0) {
             console.warn('Some users failed to register:', failed);
@@ -288,7 +291,7 @@ export default function Companies() {
               return msg;
             }).join('\n');
             
-            alert(`Warning: ${failedCount} users failed to register:\n\n${errorMessages}`);
+            alert(`Warning: ${failedCount} users failed to register to ${projectName}:\n\n${errorMessages}`);
           }
         }
       }

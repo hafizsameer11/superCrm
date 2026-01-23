@@ -19,15 +19,22 @@ interface Campaign {
   id: number;
   name: string;
   description: string | null;
-  type: 'email' | 'sms' | 'social_media' | 'advertising' | 'content' | 'event' | 'other';
+  image_path: string | null;
+  target_link: string | null;
+  type: 'BANNER_TOP' | 'BANNER_SIDE' | 'INLINE' | 'FOOTER' | 'SLIDER' | 'TICKER' | 'POPUP' | 'STICKY';
   status: 'draft' | 'scheduled' | 'active' | 'paused' | 'completed' | 'cancelled';
   start_date: string | null;
   end_date: string | null;
-  scheduled_at: string | null;
   budget: number | null;
   spent: number;
   currency: string;
   payment_status: 'unpaid' | 'pending' | 'paid' | 'failed' | null;
+  target_audience: string[] | null;
+  target_criteria: string[] | null;
+  settings: any;
+  content_data: any;
+  track_clicks: boolean;
+  track_opens: boolean;
   sent_count: number;
   delivered_count: number;
   opened_count: number;
@@ -84,17 +91,17 @@ export default function Marketing() {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'email' as 'email' | 'sms' | 'social_media' | 'advertising' | 'content' | 'event' | 'other',
+    image: null as File | null,
+    imagePreview: null as string | null,
+    type: 'BANNER_TOP' as 'BANNER_TOP' | 'BANNER_SIDE' | 'INLINE' | 'FOOTER' | 'SLIDER' | 'TICKER' | 'POPUP' | 'STICKY',
     project_id: null as number | null,
     start_date: '',
     end_date: '',
-    scheduled_at: '',
     budget: '',
     currency: 'EUR',
-    subject: '',
-    content: '',
-    target_audience: '',
-    target_criteria: '',
+    target_link: '',
+    target_audience: [] as string[],
+    target_criteria: [] as string[],
     track_clicks: true,
     track_opens: true,
   });
@@ -156,17 +163,17 @@ export default function Marketing() {
       setFormData({
         name: editingCampaign.name || '',
         description: editingCampaign.description || '',
-        type: editingCampaign.type || 'email',
+        image: null,
+        imagePreview: editingCampaign.image_path ? `${api.defaults.baseURL?.replace('/api', '') || ''}/storage/${editingCampaign.image_path}` : null,
+        type: editingCampaign.type || 'BANNER_TOP',
         project_id: editingCampaign.project?.id || null,
         start_date: editingCampaign.start_date ? new Date(editingCampaign.start_date).toISOString().slice(0, 16) : '',
         end_date: editingCampaign.end_date ? new Date(editingCampaign.end_date).toISOString().slice(0, 16) : '',
-        scheduled_at: editingCampaign.scheduled_at ? new Date(editingCampaign.scheduled_at).toISOString().slice(0, 16) : '',
         budget: editingCampaign.budget?.toString() || '',
         currency: editingCampaign.currency || 'EUR',
-        subject: editingCampaign.subject || '',
-        content: editingCampaign.content || '',
-        target_audience: Array.isArray(editingCampaign.target_audience) ? JSON.stringify(editingCampaign.target_audience) : '',
-        target_criteria: Array.isArray(editingCampaign.target_criteria) ? JSON.stringify(editingCampaign.target_criteria) : '',
+        target_link: editingCampaign.target_link || (editingCampaign.settings as any)?.target_link || (editingCampaign.content_data as any)?.target_link || '',
+        target_audience: Array.isArray(editingCampaign.target_audience) ? editingCampaign.target_audience : [],
+        target_criteria: Array.isArray(editingCampaign.target_criteria) ? editingCampaign.target_criteria : [],
         track_clicks: editingCampaign.track_clicks ?? true,
         track_opens: editingCampaign.track_opens ?? true,
       });
@@ -175,17 +182,17 @@ export default function Marketing() {
       setFormData({
         name: '',
         description: '',
-        type: 'email',
+        image: null,
+        imagePreview: null,
+        type: 'BANNER_TOP',
         project_id: null,
         start_date: '',
         end_date: '',
-        scheduled_at: '',
         budget: '',
         currency: 'EUR',
-        subject: '',
-        content: '',
-        target_audience: '',
-        target_criteria: '',
+        target_link: '',
+        target_audience: [],
+        target_criteria: [],
         track_clicks: true,
         track_opens: true,
       });
@@ -253,47 +260,39 @@ export default function Marketing() {
     setFormError('');
 
     try {
-      const payload: any = {
-        name: formData.name,
-        description: formData.description || null,
-        type: formData.type,
-        start_date: formData.start_date || null,
-        end_date: formData.end_date || null,
-        scheduled_at: formData.scheduled_at || null,
-        budget: formData.budget ? parseFloat(formData.budget) : null,
-        currency: formData.currency,
-        subject: formData.subject || null,
-        content: formData.content || null,
-        track_clicks: formData.track_clicks,
-        track_opens: formData.track_opens,
-      };
-
-      if (formData.project_id) {
-        payload.project_id = formData.project_id;
-      }
-
-      if (formData.target_audience) {
-        try {
-          payload.target_audience = JSON.parse(formData.target_audience);
-        } catch {
-          payload.target_audience = [formData.target_audience];
-        }
-      }
-
-      if (formData.target_criteria) {
-        try {
-          payload.target_criteria = JSON.parse(formData.target_criteria);
-        } catch {
-          payload.target_criteria = [formData.target_criteria];
-        }
-      }
+      const formDataToSend = new FormData();
+      formDataToSend.append('name', formData.name);
+      if (formData.description) formDataToSend.append('description', formData.description);
+      if (formData.image) formDataToSend.append('image', formData.image);
+      formDataToSend.append('type', formData.type);
+      if (formData.project_id) formDataToSend.append('project_id', formData.project_id.toString());
+      if (formData.start_date) formDataToSend.append('start_date', formData.start_date);
+      if (formData.end_date) formDataToSend.append('end_date', formData.end_date);
+      if (formData.budget) formDataToSend.append('budget', formData.budget);
+      formDataToSend.append('currency', formData.currency);
+      // Always send target_link, even if empty
+      formDataToSend.append('target_link', formData.target_link || '');
+      formDataToSend.append('track_clicks', formData.track_clicks.toString());
+      formDataToSend.append('track_opens', formData.track_opens.toString());
+      
+      // Always send target_audience and target_criteria, even if empty
+      formDataToSend.append('target_audience', JSON.stringify(formData.target_audience || []));
+      formDataToSend.append('target_criteria', JSON.stringify(formData.target_criteria || []));
 
       if (editingCampaign) {
         // Update existing campaign
-        await api.put(`/campaigns/${editingCampaign.id}`, payload);
+        await api.put(`/campaigns/${editingCampaign.id}`, formDataToSend, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
       } else {
         // Create new campaign (status will be set to 'draft' by backend)
-        await api.post('/campaigns', payload);
+        await api.post('/campaigns', formDataToSend, {
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+        });
       }
 
       setShowModal(false);
@@ -335,6 +334,22 @@ export default function Marketing() {
     } catch (error) {
       console.error('Failed to delete campaign:', error);
       alert('Failed to delete campaign');
+    }
+  };
+
+  const handleActivate = async (campaign: Campaign) => {
+    if (!confirm('Are you sure you want to activate this campaign? This will create an ad in the external system.')) {
+      return;
+    }
+
+    try {
+      const response = await api.post(`/campaigns/${campaign.id}/activate`);
+      alert(response.data.message || 'Campaign activated successfully');
+      fetchCampaigns();
+      fetchStats();
+    } catch (error: any) {
+      console.error('Failed to activate campaign:', error);
+      alert(error.response?.data?.message || 'Failed to activate campaign');
     }
   };
 
@@ -404,13 +419,14 @@ export default function Marketing() {
 
   const getTypeBadge = (type: string) => {
     const typeNames = {
-      email: 'Email',
-      sms: 'SMS',
-      social_media: 'Social Media',
-      advertising: 'Advertising',
-      content: 'Content',
-      event: 'Event',
-      other: 'Other',
+      BANNER_TOP: 'Banner Top',
+      BANNER_SIDE: 'Banner Side',
+      INLINE: 'Inline',
+      FOOTER: 'Footer',
+      SLIDER: 'Slider',
+      TICKER: 'Ticker',
+      POPUP: 'Popup',
+      STICKY: 'Sticky',
     };
     return typeNames[type as keyof typeof typeNames] || type;
   };
@@ -547,13 +563,14 @@ export default function Marketing() {
               className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
             >
               <option value="all">All Types</option>
-              <option value="email">Email</option>
-              <option value="sms">SMS</option>
-              <option value="social_media">Social Media</option>
-              <option value="advertising">Advertising</option>
-              <option value="content">Content</option>
-              <option value="event">Event</option>
-              <option value="other">Other</option>
+              <option value="BANNER_TOP">Banner Top</option>
+              <option value="BANNER_SIDE">Banner Side</option>
+              <option value="INLINE">Inline</option>
+              <option value="FOOTER">Footer</option>
+              <option value="SLIDER">Slider</option>
+              <option value="TICKER">Ticker</option>
+              <option value="POPUP">Popup</option>
+              <option value="STICKY">Sticky</option>
             </select>
           </div>
           <div className="flex items-end">
@@ -626,6 +643,16 @@ export default function Marketing() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="text-xs space-y-1">
+                        {campaign.payment_status && (
+                          <span className={`px-2 py-1 rounded-full border ${getPaymentStatusBadge(campaign.payment_status)}`}>
+                            {campaign.payment_status}
+                          </span>
+                        )}
+                       
+                      </div>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="text-xs space-y-1">
                         <div>Sent: {campaign.sent_count.toLocaleString()}</div>
                         <div>Opens: {formatPercentage(campaign.open_rate)}</div>
                         <div>Clicks: {formatPercentage(campaign.click_rate)}</div>
@@ -637,7 +664,6 @@ export default function Marketing() {
                     <td className="px-4 py-3">
                       <div className="flex flex-col gap-2">
                         <div className="flex items-center gap-2">
-                         
                           {isSuperAdmin && (
                             <select
                               value={campaign.status}
@@ -652,14 +678,6 @@ export default function Marketing() {
                               <option value="cancelled">Cancelled</option>
                             </select>
                           )}
-                         
-                        </div>
-                      
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">
-                      <div className="flex flex-col gap-2">
-                        <div className="flex items-center gap-2">
                           {(isSuperAdmin || campaign.creator?.id === user?.id) && (
                             <button
                               onClick={() => {
@@ -671,7 +689,6 @@ export default function Marketing() {
                               Edit
                             </button>
                           )}
-                         
                           {(isSuperAdmin || campaign.creator?.id === user?.id) && (
                             <button
                               onClick={() => handleDelete(campaign.id)}
@@ -681,22 +698,27 @@ export default function Marketing() {
                             </button>
                           )}
                         </div>
-                        {campaign.budget && campaign.budget > 0 && (
-                          <div className="flex items-center gap-2">
-                            {campaign.payment_status !== 'paid' && (
-                              <button
-                                onClick={() => handlePayment(campaign)}
-                                className="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 font-medium"
-                              >
-                                Pay
-                              </button>
-                            )}
-                            {campaign.payment_status && (
-                              <span className={`text-xs px-2 py-1 rounded-full border ${getPaymentStatusBadge(campaign.payment_status)}`}>
-                                {campaign.payment_status}
-                              </span>
-                            )}
-                          </div>
+                        {campaign.budget && campaign.budget > 0 && campaign.payment_status !== 'paid' && (
+                          <button
+                            onClick={() => handlePayment(campaign)}
+                            className="text-xs px-2 py-1 bg-green-500 text-white rounded hover:bg-green-600 font-medium"
+                          >
+                            Pay
+                          </button>
+                        )}
+                        {isSuperAdmin && campaign.payment_status === 'paid' && (
+                          <button
+                            onClick={() => handleActivate(campaign)}
+                            disabled={!campaign.target_link}
+                            className={`text-xs px-2 py-1 rounded font-medium ${
+                              campaign.target_link
+                                ? 'bg-blue-500 text-white hover:bg-blue-600'
+                                : 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                            }`}
+                            title={!campaign.target_link ? 'Please add a target link to activate this campaign' : 'Activate campaign'}
+                          >
+                            Activate
+                          </button>
                         )}
                       </div>
                     </td>
@@ -804,14 +826,37 @@ export default function Marketing() {
                     required
                     className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
                   >
-                    <option value="email">Email</option>
-                    <option value="sms">SMS</option>
-                    <option value="social_media">Social Media</option>
-                    <option value="advertising">Advertising</option>
-                    <option value="content">Content</option>
-                    <option value="event">Event</option>
-                    <option value="other">Other</option>
+                    <option value="BANNER_TOP">Banner Top</option>
+                    <option value="BANNER_SIDE">Banner Side</option>
+                    <option value="INLINE">Inline</option>
+                    <option value="FOOTER">Footer</option>
+                    <option value="SLIDER">Slider</option>
+                    <option value="TICKER">Ticker</option>
+                    <option value="POPUP">Popup</option>
+                    <option value="STICKY">Sticky</option>
                   </select>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">
+                    Image <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        setFormData({ ...formData, image: file, imagePreview: URL.createObjectURL(file) });
+                      }
+                    }}
+                    className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
+                  />
+                  {formData.imagePreview && (
+                    <div className="mt-2">
+                      <img src={formData.imagePreview} alt="Preview" className="max-w-xs max-h-48 rounded-lg border border-line" />
+                    </div>
+                  )}
                 </div>
 
                 <div>
@@ -851,16 +896,6 @@ export default function Marketing() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-semibold text-ink mb-2">Scheduled At</label>
-                  <input
-                    type="datetime-local"
-                    value={formData.scheduled_at}
-                    onChange={(e) => setFormData({ ...formData, scheduled_at: e.target.value })}
-                    className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
-                  />
-                </div>
-
-                <div>
                   <label className="block text-sm font-semibold text-ink mb-2">Budget</label>
                   <div className="flex gap-2">
                     <input
@@ -884,50 +919,65 @@ export default function Marketing() {
                   </div>
                 </div>
 
-                {formData.type === 'email' && (
-                  <>
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-ink mb-2">Email Subject</label>
-                      <input
-                        type="text"
-                        value={formData.subject}
-                        onChange={(e) => setFormData({ ...formData, subject: e.target.value })}
-                        className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
-                      />
-                    </div>
-
-                    <div className="md:col-span-2">
-                      <label className="block text-sm font-semibold text-ink mb-2">Email Content</label>
-                      <textarea
-                        value={formData.content}
-                        onChange={(e) => setFormData({ ...formData, content: e.target.value })}
-                        rows={6}
-                        className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
-                      />
-                    </div>
-                  </>
-                )}
-
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-ink mb-2">Target Audience (JSON array or comma-separated)</label>
-                  <textarea
-                    value={formData.target_audience}
-                    onChange={(e) => setFormData({ ...formData, target_audience: e.target.value })}
-                    rows={2}
-                    placeholder='["segment1", "segment2"] or segment1, segment2'
+                  <label className="block text-sm font-semibold text-ink mb-2">
+                    Target Link <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="url"
+                    value={formData.target_link}
+                    onChange={(e) => setFormData({ ...formData, target_link: e.target.value })}
+                    placeholder="https://example.com"
+                    required
                     className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
                   />
+                  <p className="text-xs text-muted mt-1">The URL where users will be redirected when clicking the ad</p>
                 </div>
 
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-semibold text-ink mb-2">Target Criteria (JSON object or text)</label>
-                  <textarea
-                    value={formData.target_criteria}
-                    onChange={(e) => setFormData({ ...formData, target_criteria: e.target.value })}
-                    rows={2}
-                    placeholder='{"age": "18-35", "location": "Italy"}'
-                    className="w-full px-3 py-2 border border-line rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-aqua-5/20"
-                  />
+                  <label className="block text-sm font-semibold text-ink mb-2">Target Audience</label>
+                  <div className="space-y-2">
+                    {['All Users', 'New Customers', 'Existing Customers', 'VIP Customers', 'Inactive Customers'].map((option) => (
+                      <label key={option} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.target_audience.includes(option)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, target_audience: [...formData.target_audience, option] });
+                            } else {
+                              setFormData({ ...formData, target_audience: formData.target_audience.filter(a => a !== option) });
+                            }
+                          }}
+                          className="w-4 h-4 text-aqua-5 border-line rounded focus:ring-aqua-5/20"
+                        />
+                        <span className="text-sm text-ink">{option}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="md:col-span-2">
+                  <label className="block text-sm font-semibold text-ink mb-2">Target Criteria</label>
+                  <div className="space-y-2">
+                    {['Age 18-25', 'Age 26-35', 'Age 36-45', 'Age 46+', 'Location: Italy', 'Location: Europe', 'Location: Global'].map((option) => (
+                      <label key={option} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={formData.target_criteria.includes(option)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setFormData({ ...formData, target_criteria: [...formData.target_criteria, option] });
+                            } else {
+                              setFormData({ ...formData, target_criteria: formData.target_criteria.filter(c => c !== option) });
+                            }
+                          }}
+                          className="w-4 h-4 text-aqua-5 border-line rounded focus:ring-aqua-5/20"
+                        />
+                        <span className="text-sm text-ink">{option}</span>
+                      </label>
+                    ))}
+                  </div>
                 </div>
 
                 <div className="md:col-span-2 flex gap-4">
